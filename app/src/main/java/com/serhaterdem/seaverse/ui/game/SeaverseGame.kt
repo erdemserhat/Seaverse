@@ -580,7 +580,6 @@ private fun OceanGameScreen(
                 .graphicsLayer {
                     scaleX = if (facingRight) -1f else 1f
                     rotationZ = (currentJoystickVector.y * 7f).coerceIn(-7f, 7f)
-                    shadowElevation = 8f
                 },
             contentScale = ContentScale.Fit
         )
