@@ -100,6 +100,11 @@ private data class FishInfo(
     val accent: Color
 )
 
+private data class ComfortRange(
+    val label: String,
+    val maxComfortDepthMeters: Float
+)
+
 private data class DepthZone(
     val name: String,
     val startMeters: Float,
@@ -842,6 +847,8 @@ private fun OceanGameScreen(
     var playerPosition by remember(fish.id) { mutableStateOf<Offset?>(null) }
     var facingRight by remember(fish.id) { mutableStateOf(true) }
     var selectedFishInfo by remember { mutableStateOf<FishInfo?>(null) }
+    var health by remember(fish.id) { mutableStateOf(100f) }
+    var comfort by remember(fish.id) { mutableStateOf(100f) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -853,6 +860,7 @@ private fun OceanGameScreen(
         val fishSizePx = with(density) { fishSize.toPx() }
         val worldHeightPx = (sceneSize.height * WorldDepthScreens)
             .coerceAtLeast(sceneSize.height.toFloat())
+        val comfortRange = comfortRangeFor(fish)
 
         LaunchedEffect(sceneSize, fish.id, fishSizePx, worldHeightPx) {
             if (sceneSize.width == 0 || sceneSize.height == 0) return@LaunchedEffect
@@ -871,23 +879,58 @@ private fun OceanGameScreen(
                 withFrameNanos { frameNanos ->
                     if (previousFrameNanos != 0L) {
                         val deltaSeconds = (frameNanos - previousFrameNanos) / 1_000_000_000f
+                        val safeDeltaSeconds = deltaSeconds.coerceAtMost(0.05f)
                         val input = currentJoystickVector
                         val deadZone = 0.05f
+                        var current = playerPosition ?: initialPosition()
 
                         if (input.getDistance() > deadZone) {
-                            val current = playerPosition ?: initialPosition()
                             val speed = fish.speedPxPerSecond * (0.78f + fish.agility * 0.22f)
                             val next = Offset(
-                                x = current.x + input.x * speed * deltaSeconds,
-                                y = current.y + input.y * speed * deltaSeconds
+                                x = current.x + input.x * speed * safeDeltaSeconds,
+                                y = current.y + input.y * speed * safeDeltaSeconds
                             )
                             val halfFish = fishSizePx / 2f
-                            playerPosition = Offset(
+                            current = Offset(
                                 x = next.x.coerceIn(halfFish, sceneSize.width - halfFish),
                                 y = next.y.coerceIn(halfFish, worldHeightPx - halfFish)
                             )
+                            playerPosition = current
                             if (input.x > 0.08f) facingRight = true
                             if (input.x < -0.08f) facingRight = false
+                        }
+
+                        val currentDepthMeters = depthMetersForPosition(
+                            positionY = current.y,
+                            fishSizePx = fishSizePx,
+                            worldHeightPx = worldHeightPx
+                        )
+                        val overDepth = (currentDepthMeters - comfortRange.maxComfortDepthMeters)
+                            .coerceAtLeast(0f)
+
+                        comfort = if (overDepth > 0f) {
+                            (comfort - 0.5f * safeDeltaSeconds).coerceIn(0f, 100f)
+                        } else {
+                            (comfort + (8f + fish.stamina * 8f) * safeDeltaSeconds)
+                                .coerceIn(0f, 100f)
+                        }
+
+                        health = when {
+                            comfort <= 0f -> {
+                                val damage = 1.2f + overDepth / 900f
+                                (health - damage * safeDeltaSeconds).coerceIn(0f, 100f)
+                            }
+
+                            comfort < 25f && overDepth > 0f -> {
+                                val damage = 0.35f + overDepth / 1400f
+                                (health - damage * safeDeltaSeconds).coerceIn(0f, 100f)
+                            }
+
+                            comfort > 82f && overDepth == 0f -> {
+                                (health + 2.2f * safeDeltaSeconds).coerceIn(0f, 100f)
+                            }
+
+                            else -> health
                         }
                     }
                     previousFrameNanos = frameNanos
@@ -963,9 +1006,10 @@ private fun OceanGameScreen(
                 .padding(16.dp)
         )
 
-        DepthReadout(
-            depthMeters = depthMeters,
-            depthZone = depthZone,
+        VitalStatusHud(
+            health = health,
+            comfort = comfort,
+            comfortRange = comfortRange,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .systemBarsPadding()
@@ -978,7 +1022,7 @@ private fun OceanGameScreen(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .systemBarsPadding()
-                .padding(start = 16.dp)
+                .padding(start = 6.dp)
         )
 
         MovementJoystick(
@@ -1290,43 +1334,73 @@ private fun AmbientCreaturesLayer(
 }
 
 @Composable
-private fun DepthReadout(
-    depthMeters: Float,
-    depthZone: DepthZone,
+private fun VitalStatusHud(
+    health: Float,
+    comfort: Float,
+    comfortRange: ComfortRange,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.width(190.dp),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xB8061927)),
-        border = BorderStroke(1.dp, depthZone.color.copy(alpha = 0.42f))
+    Column(
+        modifier = modifier.width(220.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+        CornerStatusBar(
+            label = "SAĞLIK",
+            value = health,
+            color = Color(0xFFE63946)
+        )
+        CornerStatusBar(
+            label = "RAHATLIK",
+            value = comfort,
+            color = Color(0xFF06D6A0),
+            footer = "Güvenli: ${comfortRange.label}"
+        )
+    }
+}
+
+@Composable
+private fun CornerStatusBar(
+    label: String,
+    value: Float,
+    color: Color,
+    footer: String? = null
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Depth",
-                color = Color.White.copy(alpha = 0.68f),
-                style = MaterialTheme.typography.labelMedium
-            )
-            Text(
-                text = "${depthMeters.roundToInt()} m",
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
+                text = label,
+                color = Color.White.copy(alpha = 0.88f),
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Black
             )
-            Text(
-                text = depthZone.name,
-                color = depthZone.color,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.42f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth((value / 100f).coerceIn(0f, 1f))
+                    .clip(CircleShape)
+                    .background(color)
             )
+        }
+        footer?.let {
             Text(
-                text = depthZone.description,
-                color = Color.White.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.bodySmall,
+                text = it,
+                color = Color.White.copy(alpha = 0.58f),
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1343,55 +1417,70 @@ private fun DepthGauge(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x99061927)),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = null
     ) {
-        Canvas(
+        Column(
             modifier = Modifier
-                .width(46.dp)
-                .height(210.dp)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .width(74.dp)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val progress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
-            val barWidth = 5.dp.toPx()
-            val centerX = size.width / 2f
-
-            drawLine(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF64D2FF),
-                        Color(0xFF1B4965),
-                        Color(0xFF060A16)
-                    )
-                ),
-                start = Offset(centerX, 0f),
-                end = Offset(centerX, size.height),
-                strokeWidth = barWidth,
-                cap = StrokeCap.Round
+            Text(
+                text = "${depthMeters.roundToInt()} m",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
             )
+            Canvas(
+                modifier = Modifier
+                    .width(46.dp)
+                    .height(210.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                val progress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
+                val barWidth = 5.dp.toPx()
+                val centerX = size.width / 2f
 
-            repeat(5) { index ->
-                val y = size.height * (index / 4f)
                 drawLine(
-                    color = Color.White.copy(alpha = 0.32f),
-                    start = Offset(centerX - 8.dp.toPx(), y),
-                    end = Offset(centerX + 8.dp.toPx(), y),
-                    strokeWidth = 1.5.dp.toPx(),
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF64D2FF),
+                            Color(0xFF1B4965),
+                            Color(0xFF060A16)
+                        )
+                    ),
+                    start = Offset(centerX, 0f),
+                    end = Offset(centerX, size.height),
+                    strokeWidth = barWidth,
                     cap = StrokeCap.Round
                 )
-            }
 
-            val markerY = size.height * progress
-            drawCircle(
-                color = depthZone.color.copy(alpha = 0.28f),
-                radius = 13.dp.toPx(),
-                center = Offset(centerX, markerY)
-            )
-            drawCircle(
-                color = Color.White,
-                radius = 5.dp.toPx(),
-                center = Offset(centerX, markerY)
-            )
+                repeat(5) { index ->
+                    val y = size.height * (index / 4f)
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.32f),
+                        start = Offset(centerX - 8.dp.toPx(), y),
+                        end = Offset(centerX + 8.dp.toPx(), y),
+                        strokeWidth = 1.5.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                val markerY = size.height * progress
+                drawCircle(
+                    color = depthZone.color.copy(alpha = 0.28f),
+                    radius = 13.dp.toPx(),
+                    center = Offset(centerX, markerY)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 5.dp.toPx(),
+                    center = Offset(centerX, markerY)
+                )
+            }
         }
     }
 }
@@ -1749,6 +1838,42 @@ private fun depthZoneFor(depthMeters: Float): DepthZone =
 
 private fun worldYForDepth(depthMeters: Float, worldHeightPx: Float): Float =
     (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f) * worldHeightPx
+
+private fun depthMetersForPosition(
+    positionY: Float,
+    fishSizePx: Float,
+    worldHeightPx: Float
+): Float =
+    if (worldHeightPx > fishSizePx) {
+        ((positionY - fishSizePx / 2f) / (worldHeightPx - fishSizePx))
+            .coerceIn(0f, 1f) * MaxDiveDepthMeters
+    } else {
+        0f
+    }
+
+private fun comfortRangeFor(fish: PlayableFish): ComfortRange {
+    val habitat = fish.habitat
+    val maxDepth = when {
+        habitat.contains("Seagrass", ignoreCase = true) -> 80f
+        habitat.contains("Kelp", ignoreCase = true) -> 120f
+        habitat.contains("Lagoon", ignoreCase = true) -> 140f
+        habitat.contains("Reef", ignoreCase = true) -> 260f
+        habitat.contains("Shelf", ignoreCase = true) -> 320f
+        habitat.contains("Rock", ignoreCase = true) -> 520f
+        habitat.contains("Cave", ignoreCase = true) -> 650f
+        habitat.contains("Open", ignoreCase = true) -> 900f
+        habitat.contains("Current", ignoreCase = true) -> 1100f
+        habitat.contains("Cold", ignoreCase = true) -> 1250f
+        habitat.contains("Twilight", ignoreCase = true) -> 1800f
+        habitat.contains("Night", ignoreCase = true) -> 2200f
+        habitat.contains("Deep", ignoreCase = true) -> 3000f
+        else -> 500f
+    }
+    return ComfortRange(
+        label = "0-${maxDepth.roundToInt()} m",
+        maxComfortDepthMeters = maxDepth
+    )
+}
 
 private fun PlayableFish.toFishInfo(currentDepthMeters: Float): FishInfo {
     val diet = dietProfileFor(name, habitat)
