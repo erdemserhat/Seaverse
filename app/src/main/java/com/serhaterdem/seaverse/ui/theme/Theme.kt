@@ -1,6 +1,5 @@
 package com.serhaterdem.seaverse.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -12,15 +11,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = OceanColors.AquaMarine,
+    secondary = OceanColors.SeaGreen,
+    tertiary = OceanColors.CoralOrange,
+    background = OceanColors.DeepBlue,
+    surface = OceanColors.MidnightBlue,
+    onPrimary = OceanColors.DeepBlue,
+    onSecondary = OceanColors.SurfaceFoam,
+    onTertiary = OceanColors.SurfaceFoam,
+    onBackground = OceanColors.SurfaceFoam,
+    onSurface = OceanColors.SurfaceFoam
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = OceanColors.OceanBlue,
+    secondary = OceanColors.SeaGreen,
+    tertiary = OceanColors.CoralOrange,
+    background = OceanColors.SurfaceFoam,
+    surface = OceanColors.SunlitWater,
+    onPrimary = OceanColors.SurfaceFoam,
+    onSecondary = OceanColors.SurfaceFoam,
+    onTertiary = OceanColors.SurfaceFoam,
+    onBackground = OceanColors.DeepBlue,
+    onSurface = OceanColors.DeepBlue
 
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
