@@ -99,6 +99,7 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val MaxDiveDepthMeters = 4000f
 private const val WorldDepthScreens = 7.5f
@@ -372,6 +373,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 16f
     ),
     AmbientCreature(
+        name = "Goldfin Racer",
+        depthMeters = 118f,
+        imageRes = R.drawable.fish_goldfin_racer,
+        sizeDp = 54f,
+        speed = 0.58f,
+        phase = 0.27f,
+        swimsRight = true,
+        verticalDriftPx = 14f
+    ),
+    AmbientCreature(
         name = "Reef Guardian",
         depthMeters = 135f,
         imageRes = R.drawable.fish_reef_guardian,
@@ -380,6 +391,16 @@ private val AmbientCreatures = listOf(
         phase = 0.31f,
         swimsRight = true,
         verticalDriftPx = 10f
+    ),
+    AmbientCreature(
+        name = "Kelp Mender",
+        depthMeters = 185f,
+        imageRes = R.drawable.fish_kelp_mender,
+        sizeDp = 66f,
+        speed = 0.3f,
+        phase = 0.74f,
+        swimsRight = false,
+        verticalDriftPx = 12f
     ),
     AmbientCreature(
         name = "Silver Needle",
@@ -402,14 +423,24 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 20f
     ),
     AmbientCreature(
-        name = "Aqua Shark",
-        depthMeters = 1180f,
-        imageRes = R.drawable.fish_aqua_shark,
-        sizeDp = 104f,
-        speed = 0.33f,
-        phase = 0.4f,
+        name = "Tide Striper",
+        depthMeters = 520f,
+        imageRes = R.drawable.fish_tide_striper,
+        sizeDp = 74f,
+        speed = 0.44f,
+        phase = 0.19f,
         swimsRight = true,
-        verticalDriftPx = 14f
+        verticalDriftPx = 18f
+    ),
+    AmbientCreature(
+        name = "Prism Tailer",
+        depthMeters = 660f,
+        imageRes = R.drawable.fish_prism_tailer,
+        sizeDp = 64f,
+        speed = 0.52f,
+        phase = 0.84f,
+        swimsRight = false,
+        verticalDriftPx = 22f
     ),
     AmbientCreature(
         name = "Moon Glider",
@@ -422,6 +453,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 26f
     ),
     AmbientCreature(
+        name = "Blue Sprinter",
+        depthMeters = 940f,
+        imageRes = R.drawable.fish_blue_sprinter,
+        sizeDp = 60f,
+        speed = 0.68f,
+        phase = 0.61f,
+        swimsRight = true,
+        verticalDriftPx = 24f
+    ),
+    AmbientCreature(
         name = "Violet Razor",
         depthMeters = 1080f,
         imageRes = R.drawable.fish_violet_razor,
@@ -432,6 +473,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 22f
     ),
     AmbientCreature(
+        name = "Aqua Shark",
+        depthMeters = 1180f,
+        imageRes = R.drawable.fish_aqua_shark,
+        sizeDp = 104f,
+        speed = 0.33f,
+        phase = 0.4f,
+        swimsRight = true,
+        verticalDriftPx = 14f
+    ),
+    AmbientCreature(
         name = "Lantern Dart",
         depthMeters = 1380f,
         imageRes = R.drawable.fish_lantern_dart,
@@ -440,6 +491,16 @@ private val AmbientCreatures = listOf(
         phase = 0.21f,
         swimsRight = false,
         verticalDriftPx = 28f
+    ),
+    AmbientCreature(
+        name = "Ember Bloom",
+        depthMeters = 1540f,
+        imageRes = R.drawable.fish_ember_bloom,
+        sizeDp = 70f,
+        speed = 0.34f,
+        phase = 0.45f,
+        swimsRight = true,
+        verticalDriftPx = 20f
     ),
     AmbientCreature(
         name = "Crimson Glider",
@@ -462,6 +523,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 18f
     ),
     AmbientCreature(
+        name = "Deep Tide Striper",
+        depthMeters = 2050f,
+        imageRes = R.drawable.fish_tide_striper,
+        sizeDp = 86f,
+        speed = 0.31f,
+        phase = 0.93f,
+        swimsRight = false,
+        verticalDriftPx = 20f
+    ),
+    AmbientCreature(
         name = "Stone Shark",
         depthMeters = 2200f,
         imageRes = R.drawable.fish_stone_shark,
@@ -482,6 +553,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 12f
     ),
     AmbientCreature(
+        name = "Royal Snapper Patrol",
+        depthMeters = 2920f,
+        imageRes = R.drawable.fish_royal_snapper,
+        sizeDp = 92f,
+        speed = 0.26f,
+        phase = 0.34f,
+        swimsRight = true,
+        verticalDriftPx = 18f
+    ),
+    AmbientCreature(
         name = "Turquoise Tank",
         depthMeters = 3180f,
         imageRes = R.drawable.fish_turquoise_tank,
@@ -500,6 +581,16 @@ private val AmbientCreatures = listOf(
         phase = 0.26f,
         swimsRight = true,
         verticalDriftPx = 14f
+    ),
+    AmbientCreature(
+        name = "Abyss Lantern Dart",
+        depthMeters = 3460f,
+        imageRes = R.drawable.fish_lantern_dart,
+        sizeDp = 88f,
+        speed = 0.28f,
+        phase = 0.81f,
+        swimsRight = false,
+        verticalDriftPx = 26f
     ),
     AmbientCreature(
         name = "Deep Royal Snapper",
@@ -981,7 +1072,8 @@ private fun OceanGameScreen(
     var askedEventTexts by remember(fish.id) { mutableStateOf<List<String>>(emptyList()) }
     var choiceHistory by remember(fish.id) { mutableStateOf<List<ChoiceRecord>>(emptyList()) }
     var consumedAmbientCreatures by remember(fish.id) { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var eatenPreyCount by remember(fish.id) { mutableStateOf(0) }
+    var creatureHealthByName by remember(fish.id) { mutableStateOf<Map<String, Float>>(emptyMap()) }
+    var playerGrowthMass by remember(fish.id) { mutableStateOf(0f) }
     var lastPredatorHitAt by remember(fish.id) { mutableStateOf(-10) }
     var eventLog by remember(fish.id) {
         mutableStateOf(
@@ -1017,7 +1109,7 @@ private fun OceanGameScreen(
     ) {
         val density = LocalDensity.current
         val baseFishSize = if (maxWidth < 680.dp) 86.dp else 118.dp
-        val playerGrowthScale = (1f + eatenPreyCount * 0.055f).coerceAtMost(1.55f)
+        val playerGrowthScale = 1f + sqrt(playerGrowthMass.coerceAtLeast(0f)) * 0.062f
         val fishSize = (baseFishSize.value * playerGrowthScale).dp
         val fishSizePx = with(density) { fishSize.toPx() }
         val hiddenCreatureNames = consumedAmbientCreatures
@@ -1197,12 +1289,14 @@ private fun OceanGameScreen(
         }
 
         LaunchedEffect(survivedSeconds, consumedAmbientCreatures) {
-            if (consumedAmbientCreatures.any { (_, respawnAtSecond) ->
-                    respawnAtSecond <= survivedSeconds
-                }
-            ) {
+            val respawnedNames = consumedAmbientCreatures
+                .filterValues { respawnAtSecond -> respawnAtSecond <= survivedSeconds }
+                .keys
+
+            if (respawnedNames.isNotEmpty()) {
                 consumedAmbientCreatures = consumedAmbientCreatures
                     .filterValues { respawnAtSecond -> respawnAtSecond > survivedSeconds }
+                creatureHealthByName = creatureHealthByName - respawnedNames
             }
         }
 
@@ -1363,16 +1457,40 @@ private fun OceanGameScreen(
             playerSizeDp = fishSize.value,
             playerSizePx = fishSizePx,
             consumedCreatureNames = hiddenCreatureNames,
-            interactionTick = survivedSeconds / 3,
+            creatureHealthByName = creatureHealthByName,
+            interactionTick = survivedSeconds,
             modifier = Modifier.fillMaxSize(),
             onCreatureClick = { selectedFishInfo = it },
-            onPreyEaten = { creature ->
+            onCreatureBite = bite@ { creature, creatureSizeDp ->
                 if (!isGameOver && creature.name !in hiddenCreatureNames) {
-                    val nextEatenPreyCount = eatenPreyCount + 1
+                    val maxCreatureHealth = ambientCreatureMaxHealth(creature)
+                    val currentCreatureHealth = creatureHealthByName[creature.name]
+                        ?: maxCreatureHealth
+                    val biteDamage = playerBiteDamage(
+                        playerSizeDp = fishSize.value,
+                        creatureSizeDp = creatureSizeDp,
+                        creatureMaxHealth = maxCreatureHealth
+                    )
+                    val nextCreatureHealth = (currentCreatureHealth - biteDamage).coerceAtLeast(0f)
+
+                    if (nextCreatureHealth > 0f) {
+                        creatureHealthByName = creatureHealthByName +
+                            (creature.name to nextCreatureHealth)
+                        appendEventLog(
+                            EventLogType.Info,
+                            "${creature.name} yaralandı. Canı ${(nextCreatureHealth / maxCreatureHealth * 100f).roundToInt()} kaldı."
+                        )
+                        return@bite
+                    }
+
                     val respawnDelaySeconds = preyRespawnDelaySeconds(creature.name)
                     consumedAmbientCreatures = consumedAmbientCreatures +
                         (creature.name to survivedSeconds + respawnDelaySeconds)
-                    eatenPreyCount = nextEatenPreyCount
+                    creatureHealthByName = creatureHealthByName - creature.name
+                    playerGrowthMass += growthMassGain(
+                        playerSizeDp = fishSize.value,
+                        creatureSizeDp = creatureSizeDp
+                    )
                     hunger = (hunger - 18).coerceIn(0, 100)
                     energy = (energy + 6).coerceIn(0, 100)
                     health = (health + 2f).coerceIn(0f, 100f)
@@ -1443,10 +1561,12 @@ private fun OceanGameScreen(
         DepthGauge(
             depthMeters = depthMeters,
             depthZone = depthZone,
+            playerX = position.x,
+            worldWidthPx = worldWidthPx,
             modifier = Modifier
-                .align(Alignment.CenterStart)
+                .align(Alignment.TopStart)
                 .systemBarsPadding()
-                .padding(start = 6.dp)
+                .padding(start = 16.dp, top = 88.dp)
         )
 
         MovementJoystick(
@@ -1562,9 +1682,9 @@ private fun OceanGameScreen(
                     accent = fish.accent,
                     onDismiss = { activeInfoCard = null },
                     modifier = Modifier
-                        .align(Alignment.Center)
+                        .align(Alignment.BottomStart)
                         .systemBarsPadding()
-                        .padding(20.dp)
+                        .padding(start = 16.dp, bottom = 214.dp)
                 )
             }
 
@@ -1832,13 +1952,14 @@ private fun ambientCreatureRole(
     val name = creature.name
     val canBePredator = creature.depthMeters >= PredatorDepthStartMeters
     return when {
+        displaySize <= playerSizeDp * 0.98f -> AmbientCreatureRole.Prey
+
         canBePredator && (
             name.contains("Shark", ignoreCase = true) ||
                 name.contains("Grouper", ignoreCase = true) ||
                 displaySize >= playerSizeDp * 1.12f
             ) -> AmbientCreatureRole.Predator
 
-        displaySize <= playerSizeDp * 0.74f -> AmbientCreatureRole.Prey
         else -> AmbientCreatureRole.Neutral
     }
 }
@@ -1853,10 +1974,11 @@ private fun AmbientCreaturesLayer(
     playerSizeDp: Float,
     playerSizePx: Float,
     consumedCreatureNames: Set<String>,
+    creatureHealthByName: Map<String, Float>,
     interactionTick: Int,
     modifier: Modifier = Modifier,
     onCreatureClick: (FishInfo) -> Unit,
-    onPreyEaten: (AmbientCreature) -> Unit,
+    onCreatureBite: (AmbientCreature, Float) -> Unit,
     onPredatorHit: (AmbientCreature) -> Unit
 ) {
     var layerSize by remember { mutableStateOf(IntSize.Zero) }
@@ -1880,7 +2002,7 @@ private fun AmbientCreaturesLayer(
         if (viewportWidth <= 0f || viewportHeight <= 0f) return@Box
 
         val playerScreenPosition = Offset(playerPosition.x - cameraX, playerPosition.y - cameraY)
-        var preyContact: AmbientCreature? = null
+        var biteContact: Pair<AmbientCreature, Float>? = null
         var predatorContact: AmbientCreature? = null
 
         AmbientCreatures.forEachIndexed { index, creature ->
@@ -1895,6 +2017,9 @@ private fun AmbientCreaturesLayer(
             val screenY = worldY - cameraY + wave
 
             if (screenY in -creatureSizePx..(viewportHeight + creatureSizePx)) {
+                val maxCreatureHealth = ambientCreatureMaxHealth(creature)
+                val creatureHealth = creatureHealthByName[creature.name] ?: maxCreatureHealth
+                val creatureHealthFraction = (creatureHealth / maxCreatureHealth).coerceIn(0f, 1f)
                 val cycleSpeed = if (role == AmbientCreatureRole.Predator) {
                     0.78f + creature.speed * 2.55f
                 } else {
@@ -1945,7 +2070,7 @@ private fun AmbientCreaturesLayer(
                 if (role == AmbientCreatureRole.Prey &&
                     contactDistance < (playerSizePx + creatureSizePx) * 0.31f
                 ) {
-                    preyContact = creature
+                    biteContact = creature to displaySizeDp
                 }
                 if (role == AmbientCreatureRole.Predator &&
                     contactDistance < (playerSizePx + creatureSizePx) * 0.34f
@@ -1991,13 +2116,37 @@ private fun AmbientCreaturesLayer(
                                 },
                             contentScale = ContentScale.Fit
                         )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth(0.76f)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.52f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(creatureHealthFraction)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            creatureHealthFraction > 0.55f -> Color(0xFF06D6A0)
+                                            creatureHealthFraction > 0.25f -> Color(0xFFFFC857)
+                                            else -> Color(0xFFE63946)
+                                        }
+                                    )
+                            )
+                        }
                     }
                 }
             }
         }
 
-        LaunchedEffect(preyContact?.name) {
-            preyContact?.let(onPreyEaten)
+        LaunchedEffect(biteContact?.first?.name, interactionTick) {
+            biteContact?.let { (creature, displaySizeDp) ->
+                onCreatureBite(creature, displaySizeDp)
+            }
         }
         LaunchedEffect(predatorContact?.name, interactionTick) {
             predatorContact?.let(onPredatorHit)
@@ -2104,8 +2253,17 @@ private fun CornerStatusBar(
 private fun DepthGauge(
     depthMeters: Float,
     depthZone: DepthZone,
+    playerX: Float,
+    worldWidthPx: Float,
     modifier: Modifier = Modifier
 ) {
+    val horizontalCoordinate = if (worldWidthPx > 0f) {
+        ((playerX / worldWidthPx).coerceIn(0f, 1f) * 100f).roundToInt()
+    } else {
+        0
+    }
+    val verticalCoordinate = depthMeters.roundToInt()
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
@@ -2114,65 +2272,127 @@ private fun DepthGauge(
     ) {
         Column(
             modifier = Modifier
-                .width(74.dp)
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+                .width(138.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text(
-                text = "${depthMeters.roundToInt()} m",
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Black,
-                maxLines = 1
-            )
             Canvas(
                 modifier = Modifier
-                    .width(46.dp)
-                    .height(210.dp)
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .size(118.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.18f))
             ) {
-                val progress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
-                val barWidth = 5.dp.toPx()
+                val depthProgress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
+                val horizontalProgress = if (worldWidthPx > 0f) {
+                    (playerX / worldWidthPx).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+                val radius = min(size.width, size.height) / 2f - 4.dp.toPx()
+                val axisColor = Color.White.copy(alpha = 0.26f)
                 val centerX = size.width / 2f
+                val centerY = size.height / 2f
+                val center = Offset(centerX, centerY)
 
-                drawLine(
-                    brush = Brush.verticalGradient(
+                drawCircle(
+                    brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF64D2FF),
-                            Color(0xFF1B4965),
-                            Color(0xFF060A16)
-                        )
+                            Color(0xFF0B2B3A).copy(alpha = 0.82f),
+                            Color(0xFF061927).copy(alpha = 0.72f),
+                            Color(0xFF020812).copy(alpha = 0.9f)
+                        ),
+                        center = center,
+                        radius = radius
                     ),
-                    start = Offset(centerX, 0f),
-                    end = Offset(centerX, size.height),
-                    strokeWidth = barWidth,
-                    cap = StrokeCap.Round
+                    radius = radius,
+                    center = center
                 )
 
-                repeat(5) { index ->
-                    val y = size.height * (index / 4f)
+                drawCircle(
+                    color = depthZone.color.copy(alpha = 0.36f),
+                    radius = radius,
+                    center = center,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.4.dp.toPx())
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.12f),
+                    radius = radius * 0.66f,
+                    center = center,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.1f),
+                    radius = radius * 0.34f,
+                    center = center,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+
+                repeat(16) { index ->
+                    val angle = (index / 16f) * 6.28f
+                    val outer = Offset(
+                        x = centerX + cos(angle) * radius,
+                        y = centerY + sin(angle) * radius
+                    )
+                    val innerRadius = radius - if (index % 4 == 0) 8.dp.toPx() else 4.dp.toPx()
+                    val inner = Offset(
+                        x = centerX + cos(angle) * innerRadius,
+                        y = centerY + sin(angle) * innerRadius
+                    )
                     drawLine(
-                        color = Color.White.copy(alpha = 0.32f),
-                        start = Offset(centerX - 8.dp.toPx(), y),
-                        end = Offset(centerX + 8.dp.toPx(), y),
-                        strokeWidth = 1.5.dp.toPx(),
+                        color = Color.White.copy(alpha = if (index % 4 == 0) 0.32f else 0.16f),
+                        start = inner,
+                        end = outer,
+                        strokeWidth = if (index % 4 == 0) 1.4.dp.toPx() else 1.dp.toPx(),
                         cap = StrokeCap.Round
                     )
                 }
 
-                val markerY = size.height * progress
+                drawLine(
+                    color = axisColor,
+                    start = Offset(centerX, centerY - radius),
+                    end = Offset(centerX, centerY + radius),
+                    strokeWidth = 1.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = axisColor,
+                    start = Offset(centerX - radius, centerY),
+                    end = Offset(centerX + radius, centerY),
+                    strokeWidth = 1.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+
+                val markerRange = radius * 0.72f
+                val markerX = centerX + (horizontalProgress - 0.5f) * 2f * markerRange
+                val markerY = centerY + (depthProgress - 0.5f) * 2f * markerRange
                 drawCircle(
                     color = depthZone.color.copy(alpha = 0.28f),
-                    radius = 13.dp.toPx(),
-                    center = Offset(centerX, markerY)
+                    radius = 14.dp.toPx(),
+                    center = Offset(markerX, markerY)
                 )
-                drawCircle(
+                drawLine(
                     color = Color.White,
-                    radius = 5.dp.toPx(),
-                    center = Offset(centerX, markerY)
+                    start = Offset(markerX - 9.dp.toPx(), markerY),
+                    end = Offset(markerX + 9.dp.toPx(), markerY),
+                    strokeWidth = 2.2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = Color.White,
+                    start = Offset(markerX, markerY - 9.dp.toPx()),
+                    end = Offset(markerX, markerY + 9.dp.toPx()),
+                    strokeWidth = 2.2.dp.toPx(),
+                    cap = StrokeCap.Round
                 )
             }
+            Text(
+                text = "X:$horizontalCoordinate  Y:${verticalCoordinate}m",
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
         }
     }
 }
@@ -2641,8 +2861,8 @@ private fun LearningInfoCardView(
 
     Card(
         modifier = modifier
-            .widthIn(max = 430.dp)
-            .fillMaxWidth(0.86f),
+            .fillMaxWidth(0.28f)
+            .widthIn(max = 380.dp),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF0061927)),
         border = BorderStroke(1.dp, labelColor.copy(alpha = 0.55f))
@@ -2988,6 +3208,31 @@ private fun formatSignedDelta(delta: Int): String =
 
 private fun preyRespawnDelaySeconds(creatureName: String): Int =
     30 + (creatureName.fold(0) { total, char -> total + char.code } % 11)
+
+private fun ambientCreatureMaxHealth(creature: AmbientCreature): Float =
+    (ambientDisplaySizeDp(creature) * 1.18f).coerceAtLeast(36f)
+
+private fun playerBiteDamage(
+    playerSizeDp: Float,
+    creatureSizeDp: Float,
+    creatureMaxHealth: Float
+): Float {
+    val sizeRatio = (playerSizeDp / creatureSizeDp.coerceAtLeast(1f)).coerceAtLeast(0.1f)
+    return when {
+        sizeRatio >= 1.45f -> creatureMaxHealth
+        sizeRatio >= 1.12f -> creatureMaxHealth * 0.58f
+        sizeRatio >= 1.04f -> creatureMaxHealth * 0.34f
+        else -> creatureMaxHealth * 0.22f
+    }
+}
+
+private fun growthMassGain(
+    playerSizeDp: Float,
+    creatureSizeDp: Float
+): Float {
+    val preyRatio = (creatureSizeDp / playerSizeDp.coerceAtLeast(1f)).coerceIn(0.08f, 1.2f)
+    return 5.5f + preyRatio * 17.5f
+}
 
 private fun learningScoreFor(choices: List<ChoiceRecord>): Int {
     if (choices.isEmpty()) return 0
