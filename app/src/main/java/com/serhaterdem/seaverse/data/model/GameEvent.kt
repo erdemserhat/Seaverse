@@ -10,7 +10,8 @@ data class Event(
 data class Option(
     val id: String,
     val text: String,
-    val effects: Effects
+    val effects: Effects,
+    val lesson: String = ""
 )
 
 data class Effects(
@@ -30,8 +31,16 @@ enum class EventSource {
 
 data class EventResult(
     val state: GameState,
-    val feedback: String
+    val feedback: String,
+    val assessment: ChoiceAssessment
 )
+
+enum class ChoiceAssessment(val label: String) {
+    Correct("Doğru"),
+    Partial("Kısmen doğru"),
+    Risky("Riskli"),
+    Wrong("Yanlış")
+}
 
 data class FishEventContext(
     val fishId: String,

@@ -1,5 +1,6 @@
 package com.serhaterdem.seaverse.ui.game
 
+import android.annotation.SuppressLint
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -80,6 +82,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.serhaterdem.seaverse.R
+import com.serhaterdem.seaverse.data.model.ChoiceAssessment
 import com.serhaterdem.seaverse.data.model.Event
 import com.serhaterdem.seaverse.data.model.FishEventContext
 import com.serhaterdem.seaverse.data.model.GameEventEngine
@@ -99,6 +102,8 @@ import kotlin.math.sin
 
 private const val MaxDiveDepthMeters = 4000f
 private const val WorldDepthScreens = 7.5f
+private const val WorldWidthScreens = 3.2f
+private const val PredatorDepthStartMeters = 900f
 
 private data class PlayableFish(
     val id: String,
@@ -133,6 +138,25 @@ private enum class EventLogType(val label: String) {
 private data class EventLogEntry(
     val type: EventLogType,
     val message: String
+)
+
+private data class LearningInfoCard(
+    val title: String,
+    val message: String,
+    val type: EventLogType
+)
+
+private data class ChoiceRecord(
+    val eventText: String,
+    val optionText: String,
+    val feedback: String,
+    val assessment: ChoiceAssessment,
+    val scoreDelta: Int,
+    val healthDelta: Int,
+    val comfortDelta: Int,
+    val hungerDelta: Int,
+    val energyDelta: Int,
+    val depthMeters: Int
 )
 
 private data class ComfortRange(
@@ -379,7 +403,7 @@ private val AmbientCreatures = listOf(
     ),
     AmbientCreature(
         name = "Aqua Shark",
-        depthMeters = 540f,
+        depthMeters = 1180f,
         imageRes = R.drawable.fish_aqua_shark,
         sizeDp = 104f,
         speed = 0.33f,
@@ -428,6 +452,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 20f
     ),
     AmbientCreature(
+        name = "Deep Aqua Shark",
+        depthMeters = 1880f,
+        imageRes = R.drawable.fish_aqua_shark,
+        sizeDp = 112f,
+        speed = 0.36f,
+        phase = 0.77f,
+        swimsRight = false,
+        verticalDriftPx = 18f
+    ),
+    AmbientCreature(
         name = "Stone Shark",
         depthMeters = 2200f,
         imageRes = R.drawable.fish_stone_shark,
@@ -458,6 +492,16 @@ private val AmbientCreatures = listOf(
         verticalDriftPx = 18f
     ),
     AmbientCreature(
+        name = "Abyss Stone Shark",
+        depthMeters = 3320f,
+        imageRes = R.drawable.fish_stone_shark,
+        sizeDp = 128f,
+        speed = 0.22f,
+        phase = 0.26f,
+        swimsRight = true,
+        verticalDriftPx = 14f
+    ),
+    AmbientCreature(
         name = "Deep Royal Snapper",
         depthMeters = 3550f,
         imageRes = R.drawable.fish_royal_snapper,
@@ -466,6 +510,16 @@ private val AmbientCreatures = listOf(
         phase = 0.38f,
         swimsRight = true,
         verticalDriftPx = 24f
+    ),
+    AmbientCreature(
+        name = "Abyss Grouper",
+        depthMeters = 3740f,
+        imageRes = R.drawable.fish_ancient_grouper,
+        sizeDp = 122f,
+        speed = 0.18f,
+        phase = 0.49f,
+        swimsRight = false,
+        verticalDriftPx = 12f
     ),
     AmbientCreature(
         name = "Icefin",
@@ -890,6 +944,7 @@ private fun FishStat(
     }
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 private fun OceanGameScreen(
     fish: PlayableFish,
@@ -902,6 +957,16 @@ private fun OceanGameScreen(
     var facingRight by remember(fish.id) { mutableStateOf(true) }
     var selectedFishInfo by remember { mutableStateOf<FishInfo?>(null) }
     var activeChatInfo by remember { mutableStateOf<FishInfo?>(null) }
+    val startingScenario = remember(fish.id) { startingScenarioFor(fish) }
+    var activeInfoCard by remember(fish.id) {
+        mutableStateOf<LearningInfoCard?>(
+            LearningInfoCard(
+                title = "Başlangıç Bilgisi",
+                message = startingScenario,
+                type = EventLogType.Info
+            )
+        )
+    }
     var health by remember(fish.id) { mutableStateOf(100f) }
     var comfort by remember(fish.id) { mutableStateOf(100f) }
     var hunger by remember(fish.id) { mutableStateOf(50) }
@@ -914,8 +979,11 @@ private fun OceanGameScreen(
     var isEventLoading by remember(fish.id) { mutableStateOf(false) }
     var pendingEventRequest by remember(fish.id) { mutableStateOf<GameState?>(null) }
     var askedEventTexts by remember(fish.id) { mutableStateOf<List<String>>(emptyList()) }
+    var choiceHistory by remember(fish.id) { mutableStateOf<List<ChoiceRecord>>(emptyList()) }
+    var consumedAmbientCreatures by remember(fish.id) { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var eatenPreyCount by remember(fish.id) { mutableStateOf(0) }
+    var lastPredatorHitAt by remember(fish.id) { mutableStateOf(-10) }
     var eventLog by remember(fish.id) {
-        val intro = startingScenarioFor(fish)
         mutableStateOf(
             listOf(
                 EventLogEntry(
@@ -924,7 +992,7 @@ private fun OceanGameScreen(
                 ),
                 EventLogEntry(
                     type = EventLogType.Extra,
-                    message = intro
+                    message = startingScenario
                 )
             )
         )
@@ -933,6 +1001,7 @@ private fun OceanGameScreen(
     var wasOutsideComfortDepth by remember(fish.id) { mutableStateOf(false) }
     var lastHealthWarningAt by remember(fish.id) { mutableStateOf(-10) }
     var lastTriviaAt by remember(fish.id) { mutableStateOf(0) }
+    var hasLoggedGameOver by remember(fish.id) { mutableStateOf(false) }
 
     fun appendEventLog(type: EventLogType, vararg messages: String) {
         val entries = messages.map { message ->
@@ -947,13 +1016,20 @@ private fun OceanGameScreen(
             .onSizeChanged { sceneSize = it }
     ) {
         val density = LocalDensity.current
-        val fishSize = if (maxWidth < 680.dp) 86.dp else 118.dp
+        val baseFishSize = if (maxWidth < 680.dp) 86.dp else 118.dp
+        val playerGrowthScale = (1f + eatenPreyCount * 0.055f).coerceAtMost(1.55f)
+        val fishSize = (baseFishSize.value * playerGrowthScale).dp
         val fishSizePx = with(density) { fishSize.toPx() }
+        val hiddenCreatureNames = consumedAmbientCreatures
+            .filterValues { respawnAtSecond -> respawnAtSecond > survivedSeconds }
+            .keys
+        val worldWidthPx = (sceneSize.width * WorldWidthScreens)
+            .coerceAtLeast(sceneSize.width.toFloat())
         val worldHeightPx = (sceneSize.height * WorldDepthScreens)
             .coerceAtLeast(sceneSize.height.toFloat())
         val comfortRange = comfortRangeFor(fish)
 
-        LaunchedEffect(sceneSize, fish.id, fishSizePx, worldHeightPx) {
+        LaunchedEffect(sceneSize, fish.id, fishSizePx, worldWidthPx, worldHeightPx) {
             if (sceneSize.width == 0 || sceneSize.height == 0) return@LaunchedEffect
 
             fun initialPosition() = Offset(
@@ -961,15 +1037,23 @@ private fun OceanGameScreen(
                 y = sceneSize.height * 0.42f
             )
 
-            if (playerPosition == null) {
-                playerPosition = initialPosition()
+            fun clampPlayerPosition(position: Offset): Offset {
+                val halfFish = fishSizePx / 2f
+                val maxX = (worldWidthPx - halfFish).coerceAtLeast(halfFish)
+                val maxY = (worldHeightPx - halfFish).coerceAtLeast(halfFish)
+                return Offset(
+                    x = position.x.coerceIn(halfFish, maxX),
+                    y = position.y.coerceIn(halfFish, maxY)
+                )
             }
+
+            playerPosition = clampPlayerPosition(playerPosition ?: initialPosition())
 
             var previousFrameNanos = 0L
             var secondAccumulator = 0f
             while (isActive) {
                 withFrameNanos { frameNanos ->
-                    if (previousFrameNanos != 0L) {
+                    if (previousFrameNanos != 0L && health > 0f) {
                         val deltaSeconds = (frameNanos - previousFrameNanos) / 1_000_000_000f
                         val safeDeltaSeconds = deltaSeconds.coerceAtMost(0.05f)
                         val input = currentJoystickVector
@@ -985,11 +1069,7 @@ private fun OceanGameScreen(
                                 x = current.x + input.x * speed * safeDeltaSeconds,
                                 y = current.y + input.y * speed * safeDeltaSeconds
                             )
-                            val halfFish = fishSizePx / 2f
-                            current = Offset(
-                                x = next.x.coerceIn(halfFish, sceneSize.width - halfFish),
-                                y = next.y.coerceIn(halfFish, worldHeightPx - halfFish)
-                            )
+                            current = clampPlayerPosition(next)
                             playerPosition = current
                             if (input.x > 0.08f) facingRight = true
                             if (input.x < -0.08f) facingRight = false
@@ -1061,6 +1141,12 @@ private fun OceanGameScreen(
             x = sceneSize.width * 0.44f,
             y = sceneSize.height * 0.42f
         )
+        val cameraX = if (sceneSize.width > 0) {
+            (position.x - sceneSize.width * 0.48f)
+                .coerceIn(0f, (worldWidthPx - sceneSize.width).coerceAtLeast(0f))
+        } else {
+            0f
+        }
         val cameraY = if (sceneSize.height > 0) {
             (position.y - sceneSize.height * 0.48f)
                 .coerceIn(0f, (worldHeightPx - sceneSize.height).coerceAtLeast(0f))
@@ -1088,11 +1174,35 @@ private fun OceanGameScreen(
             survivedSeconds = survivedSeconds,
             lastEventAtSeconds = lastEventAtSeconds
         )
+        val isGameOver = gameSnapshot.health <= 0
+
+        LaunchedEffect(isGameOver) {
+            if (isGameOver && !hasLoggedGameOver) {
+                activeEvent = null
+                pendingEventRequest = null
+                joystickVector = Offset.Zero
+                appendEventLog(
+                    EventLogType.Warning,
+                    "Sağlık sıfırlandı. Seçim özeti açıldı."
+                )
+                hasLoggedGameOver = true
+            }
+        }
 
         LaunchedEffect(eventFeedback) {
             if (eventFeedback != null) {
                 delay(4800)
                 eventFeedback = null
+            }
+        }
+
+        LaunchedEffect(survivedSeconds, consumedAmbientCreatures) {
+            if (consumedAmbientCreatures.any { (_, respawnAtSecond) ->
+                    respawnAtSecond <= survivedSeconds
+                }
+            ) {
+                consumedAmbientCreatures = consumedAmbientCreatures
+                    .filterValues { respawnAtSecond -> respawnAtSecond > survivedSeconds }
             }
         }
 
@@ -1102,6 +1212,8 @@ private fun OceanGameScreen(
             gameSnapshot.comfort,
             gameSnapshot.health
         ) {
+            if (isGameOver) return@LaunchedEffect
+
             if (depthOverComfort > 0f && !hasShownDepthWarning) {
                 appendEventLog(
                     EventLogType.Warning,
@@ -1133,10 +1245,20 @@ private fun OceanGameScreen(
         }
 
         LaunchedEffect(gameSnapshot.survivedSeconds) {
+            if (isGameOver) return@LaunchedEffect
+
             if (gameSnapshot.survivedSeconds >= 20 &&
                 gameSnapshot.survivedSeconds - lastTriviaAt >= 30
             ) {
-                appendEventLog(EventLogType.Extra, OceanTrivia.random())
+                val trivia = OceanTrivia.random()
+                appendEventLog(EventLogType.Extra, trivia)
+                if (activeInfoCard == null) {
+                    activeInfoCard = LearningInfoCard(
+                        title = "Ekstra Bilgi",
+                        message = trivia,
+                        type = EventLogType.Extra
+                    )
+                }
                 lastTriviaAt = gameSnapshot.survivedSeconds
             }
         }
@@ -1148,8 +1270,10 @@ private fun OceanGameScreen(
             gameSnapshot.zone,
             selectedFishInfo,
             activeChatInfo,
+            activeInfoCard,
             eventFeedback
         ) {
+            if (isGameOver) return@LaunchedEffect
             if (pendingEventRequest != null) return@LaunchedEffect
             val canTrigger = GameEventEngine.shouldTriggerEvent(
                 state = gameSnapshot,
@@ -1157,6 +1281,7 @@ private fun OceanGameScreen(
                 hasActiveEvent = activeEvent != null ||
                     selectedFishInfo != null ||
                     activeChatInfo != null ||
+                    activeInfoCard != null ||
                     eventFeedback != null,
                 isLoading = isEventLoading
             )
@@ -1173,6 +1298,7 @@ private fun OceanGameScreen(
             pendingEventRequest?.zone
         ) {
             val requestState = pendingEventRequest ?: return@LaunchedEffect
+            if (isGameOver) return@LaunchedEffect
 
             isEventLoading = true
             try {
@@ -1212,23 +1338,63 @@ private fun OceanGameScreen(
         }
 
         DepthOceanWorld(
+            cameraX = cameraX,
             cameraY = cameraY,
+            worldWidthPx = worldWidthPx,
             worldHeightPx = worldHeightPx,
             depthMeters = depthMeters,
             modifier = Modifier.fillMaxSize()
         )
 
         DepthDecorationsLayer(
+            cameraX = cameraX,
             cameraY = cameraY,
+            worldWidthPx = worldWidthPx,
             worldHeightPx = worldHeightPx,
             modifier = Modifier.fillMaxSize()
         )
 
         AmbientCreaturesLayer(
+            cameraX = cameraX,
             cameraY = cameraY,
+            worldWidthPx = worldWidthPx,
             worldHeightPx = worldHeightPx,
+            playerPosition = position,
+            playerSizeDp = fishSize.value,
+            playerSizePx = fishSizePx,
+            consumedCreatureNames = hiddenCreatureNames,
+            interactionTick = survivedSeconds / 3,
             modifier = Modifier.fillMaxSize(),
-            onCreatureClick = { selectedFishInfo = it }
+            onCreatureClick = { selectedFishInfo = it },
+            onPreyEaten = { creature ->
+                if (!isGameOver && creature.name !in hiddenCreatureNames) {
+                    val nextEatenPreyCount = eatenPreyCount + 1
+                    val respawnDelaySeconds = preyRespawnDelaySeconds(creature.name)
+                    consumedAmbientCreatures = consumedAmbientCreatures +
+                        (creature.name to survivedSeconds + respawnDelaySeconds)
+                    eatenPreyCount = nextEatenPreyCount
+                    hunger = (hunger - 18).coerceIn(0, 100)
+                    energy = (energy + 6).coerceIn(0, 100)
+                    health = (health + 2f).coerceIn(0f, 100f)
+                    score += 18
+                    appendEventLog(
+                        EventLogType.Info,
+                        "Küçük ${creature.name} yakalandı. +18 puan, açlık azaldı, biraz büyüdün. ${respawnDelaySeconds} saniye sonra yeniden görünebilir."
+                    )
+                }
+            },
+            onPredatorHit = { creature ->
+                if (!isGameOver && survivedSeconds - lastPredatorHitAt >= 3) {
+                    lastPredatorHitAt = survivedSeconds
+                    health = (health - 16f).coerceIn(0f, 100f)
+                    energy = (energy - 10).coerceIn(0, 100)
+                    score = (score - 8).coerceAtLeast(0)
+                    appendEventLog(
+                        EventLogType.Warning,
+                        "Büyük ${creature.name} saldırdı. Kaç; sağlık ve enerji düştü."
+                    )
+                }
+            }
         )
 
         Image(
@@ -1238,7 +1404,7 @@ private fun OceanGameScreen(
                 .size(fishSize)
                 .offset {
                     IntOffset(
-                        x = (position.x - fishSizePx / 2f).roundToInt(),
+                        x = (position.x - cameraX - fishSizePx / 2f).roundToInt(),
                         y = (position.y - cameraY - fishSizePx / 2f).roundToInt()
                     )
                 }
@@ -1292,7 +1458,7 @@ private fun OceanGameScreen(
             onVectorChange = { joystickVector = it }
         )
 
-        activeEvent?.let { event ->
+        activeEvent?.takeUnless { isGameOver }?.let { event ->
             FishEventCard(
                 event = event,
                 depthZone = depthZone,
@@ -1304,8 +1470,32 @@ private fun OceanGameScreen(
                     hunger = result.state.hunger
                     energy = result.state.energy
                     score = result.state.score
+                    choiceHistory = (
+                        choiceHistory + ChoiceRecord(
+                            eventText = event.text,
+                            optionText = option.text,
+                            feedback = result.feedback,
+                            assessment = result.assessment,
+                            scoreDelta = result.state.score - gameSnapshot.score,
+                            healthDelta = result.state.health - gameSnapshot.health,
+                            comfortDelta = result.state.comfort - gameSnapshot.comfort,
+                            hungerDelta = result.state.hunger - gameSnapshot.hunger,
+                            energyDelta = result.state.energy - gameSnapshot.energy,
+                            depthMeters = gameSnapshot.depth
+                        )
+                    ).takeLast(12)
                     activeEvent = null
                     eventFeedback = result.feedback
+                    activeInfoCard = LearningInfoCard(
+                        title = "${result.assessment.label} Seçim",
+                        message = result.feedback,
+                        type = when (result.assessment) {
+                            ChoiceAssessment.Correct -> EventLogType.Ideal
+                            ChoiceAssessment.Partial -> EventLogType.Info
+                            ChoiceAssessment.Risky -> EventLogType.Warning
+                            ChoiceAssessment.Wrong -> EventLogType.Warning
+                        }
+                    )
                     appendEventLog(
                         EventLogType.Info,
                         "${event.text} karşısında \"${option.text}\" seçimini yaptın. " +
@@ -1358,12 +1548,46 @@ private fun OceanGameScreen(
                     .padding(24.dp)
             )
         }
+
+        activeInfoCard
+            ?.takeUnless {
+                activeEvent != null ||
+                    selectedFishInfo != null ||
+                    activeChatInfo != null ||
+                    isGameOver
+            }
+            ?.let { card ->
+                LearningInfoCardView(
+                    info = card,
+                    accent = fish.accent,
+                    onDismiss = { activeInfoCard = null },
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .systemBarsPadding()
+                        .padding(20.dp)
+                )
+            }
+
+        if (isGameOver) {
+            GameOverSummaryCard(
+                fish = fish,
+                state = gameSnapshot,
+                choices = choiceHistory,
+                onChangeFish = onChangeFish,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .padding(18.dp)
+            )
+        }
     }
 }
 
 @Composable
 private fun DepthOceanWorld(
+    cameraX: Float,
     cameraY: Float,
+    worldWidthPx: Float,
     worldHeightPx: Float,
     depthMeters: Float,
     modifier: Modifier = Modifier
@@ -1419,14 +1643,17 @@ private fun DepthOceanWorld(
         )
 
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val safeWorldWidth = worldWidthPx.coerceAtLeast(size.width)
             val safeWorldHeight = worldHeightPx.coerceAtLeast(size.height)
             val depthProgress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
             val surfaceFade = (1f - cameraY / (safeWorldHeight * 0.22f)).coerceIn(0f, 1f)
             val marineSnowAlpha = (0.08f + depthProgress * 0.22f).coerceIn(0.08f, 0.3f)
+            val parallaxX = cameraX * 0.18f
 
             repeat(7) { index ->
-                val startX = size.width * (0.16f + index * 0.11f)
-                val endX = size.width * (0.03f + index * 0.15f + shimmer * 0.04f)
+                val startX = size.width * (0.16f + index * 0.11f) - parallaxX % size.width
+                val endX = size.width * (0.03f + index * 0.15f + shimmer * 0.04f) -
+                    parallaxX % size.width
                 drawLine(
                     color = Color.White.copy(alpha = surfaceFade * (0.045f + shimmer * 0.025f)),
                     start = Offset(startX, -20f),
@@ -1452,39 +1679,44 @@ private fun DepthOceanWorld(
             }
 
             repeat(90) { index ->
-                val lane = ((index * 37) % 100) / 100f
+                val laneWorldX = safeWorldWidth * (((index * 37) % 100) / 100f)
                 val wave = sin((drift * 6.28f) + index * 0.8f) * (10f + depthProgress * 18f)
-                val x = size.width * lane + wave
+                val x = laneWorldX - cameraX * 0.32f + wave
                 val travel = size.height + 160f
                 val speed = 0.45f + (index % 7) * 0.08f
                 val y = size.height - ((drift * travel * speed + index * 53f + cameraY * 0.12f) % travel)
                 val radius = 1.2f + (index % 4) * 0.75f
-                drawCircle(
-                    color = Color.White.copy(alpha = marineSnowAlpha),
-                    radius = radius,
-                    center = Offset(x, y)
-                )
+                if (x in -24f..(size.width + 24f)) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = marineSnowAlpha),
+                        radius = radius,
+                        center = Offset(x, y)
+                    )
+                }
             }
 
             repeat(16) { index ->
                 val worldY = safeWorldHeight * (0.28f + index * 0.042f)
                 val y = worldY - cameraY
                 if (y in -80f..(size.height + 80f)) {
-                    val x = size.width * (0.08f + ((index * 29) % 84) / 100f)
+                    val x = safeWorldWidth * (0.08f + ((index * 29) % 84) / 100f) -
+                        cameraX * 0.74f
                     val plantHeight = 28f + (index % 5) * 8f
                     val color = if (index % 2 == 0) Color(0xFF00F5D4) else Color(0xFFC77DFF)
-                    drawLine(
-                        color = color.copy(alpha = 0.18f + depthProgress * 0.24f),
-                        start = Offset(x, y + plantHeight),
-                        end = Offset(x + sin(index.toFloat()) * 14f, y),
-                        strokeWidth = 2.4f,
-                        cap = StrokeCap.Round
-                    )
-                    drawCircle(
-                        color = color.copy(alpha = 0.28f + shimmer * 0.18f),
-                        radius = 3.8f + (index % 3),
-                        center = Offset(x + sin(index.toFloat()) * 14f, y)
-                    )
+                    if (x in -60f..(size.width + 60f)) {
+                        drawLine(
+                            color = color.copy(alpha = 0.18f + depthProgress * 0.24f),
+                            start = Offset(x, y + plantHeight),
+                            end = Offset(x + sin(index.toFloat()) * 14f, y),
+                            strokeWidth = 2.4f,
+                            cap = StrokeCap.Round
+                        )
+                        drawCircle(
+                            color = color.copy(alpha = 0.28f + shimmer * 0.18f),
+                            radius = 3.8f + (index % 3),
+                            center = Offset(x + sin(index.toFloat()) * 14f, y)
+                        )
+                    }
                 }
             }
 
@@ -1497,24 +1729,28 @@ private fun DepthOceanWorld(
                     size = Size(size.width, size.height - floorY.coerceAtLeast(0f))
                 )
                 repeat(12) { index ->
-                    val rockX = size.width * (((index * 19) % 100) / 100f)
+                    val rockX = safeWorldWidth * (((index * 19) % 100) / 100f) - cameraX
                     val rockY = floorY + 28f + (index % 4) * 22f
-                    drawOval(
-                        color = Color(0xFF14242C).copy(alpha = 0.92f),
-                        topLeft = Offset(rockX - 42f, rockY),
-                        size = Size(84f + (index % 3) * 24f, 26f + (index % 4) * 9f)
-                    )
+                    if (rockX in -120f..(size.width + 120f)) {
+                        drawOval(
+                            color = Color(0xFF14242C).copy(alpha = 0.92f),
+                            topLeft = Offset(rockX - 42f, rockY),
+                            size = Size(84f + (index % 3) * 24f, 26f + (index % 4) * 9f)
+                        )
+                    }
                 }
                 repeat(6) { index ->
-                    val ventX = size.width * (0.12f + index * 0.15f)
+                    val ventX = safeWorldWidth * (0.12f + index * 0.15f) - cameraX
                     val ventBaseY = floorY + 92f
-                    drawLine(
-                        color = Color(0xFF00F5D4).copy(alpha = 0.2f + shimmer * 0.15f),
-                        start = Offset(ventX, ventBaseY),
-                        end = Offset(ventX + sin(index + shimmer) * 18f, ventBaseY - 76f),
-                        strokeWidth = 3f,
-                        cap = StrokeCap.Round
-                    )
+                    if (ventX in -80f..(size.width + 80f)) {
+                        drawLine(
+                            color = Color(0xFF00F5D4).copy(alpha = 0.2f + shimmer * 0.15f),
+                            start = Offset(ventX, ventBaseY),
+                            end = Offset(ventX + sin(index + shimmer) * 18f, ventBaseY - 76f),
+                            strokeWidth = 3f,
+                            cap = StrokeCap.Round
+                        )
+                    }
                 }
             }
 
@@ -1527,7 +1763,9 @@ private fun DepthOceanWorld(
 
 @Composable
 private fun DepthDecorationsLayer(
+    cameraX: Float,
     cameraY: Float,
+    worldWidthPx: Float,
     worldHeightPx: Float,
     modifier: Modifier = Modifier
 ) {
@@ -1542,10 +1780,15 @@ private fun DepthDecorationsLayer(
         DepthDecorations.forEach { decoration ->
             val worldY = worldYForDepth(decoration.depthMeters, worldHeightPx)
             val parallaxCameraY = cameraY * decoration.parallax
+            val parallaxCameraX = cameraX * decoration.parallax
+            val worldX = worldWidthPx * decoration.xFraction
+            val screenX = worldX - parallaxCameraX
             val screenY = worldY - parallaxCameraY
             val widthPx = with(density) { decoration.widthDp.dp.toPx() }
 
-            if (screenY in -widthPx..(viewportHeight + widthPx)) {
+            if (screenX in -widthPx..(viewportWidth + widthPx) &&
+                screenY in -widthPx..(viewportHeight + widthPx)
+            ) {
                 Image(
                     painter = painterResource(decoration.imageRes),
                     contentDescription = decoration.id,
@@ -1553,7 +1796,7 @@ private fun DepthDecorationsLayer(
                         .width(decoration.widthDp.dp)
                         .offset {
                             IntOffset(
-                                x = (viewportWidth * decoration.xFraction - widthPx / 2f).roundToInt(),
+                                x = (screenX - widthPx / 2f).roundToInt(),
                                 y = (screenY - widthPx * 0.55f).roundToInt()
                             )
                         }
@@ -1568,12 +1811,53 @@ private fun DepthDecorationsLayer(
     }
 }
 
+private fun ambientDisplaySizeDp(creature: AmbientCreature): Float {
+    val name = creature.name
+    return when {
+        name.contains("Shark", ignoreCase = true) -> creature.sizeDp * 1.68f
+        name.contains("Grouper", ignoreCase = true) -> creature.sizeDp * 1.5f
+        name.contains("Tank", ignoreCase = true) -> creature.sizeDp * 1.35f
+        creature.sizeDp <= 62f -> creature.sizeDp * 0.62f
+        creature.sizeDp <= 76f -> creature.sizeDp * 0.76f
+        creature.sizeDp <= 86f -> creature.sizeDp * 0.86f
+        else -> creature.sizeDp
+    }.coerceIn(28f, 206f)
+}
+
+private fun ambientCreatureRole(
+    creature: AmbientCreature,
+    playerSizeDp: Float
+): AmbientCreatureRole {
+    val displaySize = ambientDisplaySizeDp(creature)
+    val name = creature.name
+    val canBePredator = creature.depthMeters >= PredatorDepthStartMeters
+    return when {
+        canBePredator && (
+            name.contains("Shark", ignoreCase = true) ||
+                name.contains("Grouper", ignoreCase = true) ||
+                displaySize >= playerSizeDp * 1.12f
+            ) -> AmbientCreatureRole.Predator
+
+        displaySize <= playerSizeDp * 0.74f -> AmbientCreatureRole.Prey
+        else -> AmbientCreatureRole.Neutral
+    }
+}
+
 @Composable
 private fun AmbientCreaturesLayer(
+    cameraX: Float,
     cameraY: Float,
+    worldWidthPx: Float,
     worldHeightPx: Float,
+    playerPosition: Offset,
+    playerSizeDp: Float,
+    playerSizePx: Float,
+    consumedCreatureNames: Set<String>,
+    interactionTick: Int,
     modifier: Modifier = Modifier,
-    onCreatureClick: (FishInfo) -> Unit
+    onCreatureClick: (FishInfo) -> Unit,
+    onPreyEaten: (AmbientCreature) -> Unit,
+    onPredatorHit: (AmbientCreature) -> Unit
 ) {
     var layerSize by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
@@ -1595,54 +1879,128 @@ private fun AmbientCreaturesLayer(
         val viewportHeight = layerSize.height.toFloat()
         if (viewportWidth <= 0f || viewportHeight <= 0f) return@Box
 
+        val playerScreenPosition = Offset(playerPosition.x - cameraX, playerPosition.y - cameraY)
+        var preyContact: AmbientCreature? = null
+        var predatorContact: AmbientCreature? = null
+
         AmbientCreatures.forEachIndexed { index, creature ->
-            val creatureSizePx = with(density) { creature.sizeDp.dp.toPx() }
+            if (creature.name in consumedCreatureNames) return@forEachIndexed
+
+            val displaySizeDp = ambientDisplaySizeDp(creature)
+            val creatureSizePx = with(density) { displaySizeDp.dp.toPx() }
+            val role = ambientCreatureRole(creature, playerSizeDp)
             val worldY = worldYForDepth(creature.depthMeters, worldHeightPx)
             val wave = sin(swimClock * 6.28f * (1.2f + creature.speed) + index) *
                 creature.verticalDriftPx
             val screenY = worldY - cameraY + wave
 
             if (screenY in -creatureSizePx..(viewportHeight + creatureSizePx)) {
-                val cycleSpeed = 0.58f + creature.speed * 1.9f
+                val cycleSpeed = if (role == AmbientCreatureRole.Predator) {
+                    0.78f + creature.speed * 2.55f
+                } else {
+                    0.58f + creature.speed * 1.9f
+                }
                 val cycle = (swimClock * cycleSpeed + creature.phase) % 1f
-                val travel = viewportWidth + creatureSizePx * 2f
+                val travel = worldWidthPx + creatureSizePx * 2f
                 val leftToRightX = -creatureSizePx + cycle * travel
-                val screenX = if (creature.swimsRight) {
+                val worldX = if (creature.swimsRight) {
                     leftToRightX
                 } else {
-                    viewportWidth + creatureSizePx - cycle * travel
+                    worldWidthPx + creatureSizePx - cycle * travel
                 }
+                val screenX = worldX - cameraX
+                var adjustedX = screenX
+                var adjustedY = screenY
+                val creatureCenter = Offset(
+                    x = screenX + creatureSizePx / 2f,
+                    y = screenY
+                )
+                val toPlayer = playerScreenPosition - creatureCenter
+                val distanceToPlayer = toPlayer.getDistance().coerceAtLeast(1f)
+
+                if (role == AmbientCreatureRole.Predator) {
+                    val chaseRange = (viewportWidth * 0.95f + viewportHeight * 0.45f)
+                        .coerceAtLeast(520f)
+                    val chasePower = (1f - distanceToPlayer / chaseRange).coerceIn(0f, 1f)
+                    if (chasePower > 0f) {
+                        val horizontalPull = 0.2f + chasePower * 0.68f + creature.speed * 0.08f
+                        val verticalPull = 0.16f + chasePower * 0.5f
+                        val lunge = sin(swimClock * 12.56f + index) * 18f * chasePower
+                        adjustedX += toPlayer.x * horizontalPull + if (toPlayer.x >= 0f) lunge else -lunge
+                        adjustedY += toPlayer.y * verticalPull
+                    }
+                }
+
+                if (role == AmbientCreatureRole.Prey && distanceToPlayer < 260f) {
+                    val push = (1f - distanceToPlayer / 260f).coerceIn(0f, 1f)
+                    adjustedX -= toPlayer.x / distanceToPlayer * 86f * push
+                    adjustedY -= toPlayer.y / distanceToPlayer * 46f * push
+                }
+
+                val adjustedCenter = Offset(
+                    x = adjustedX + creatureSizePx / 2f,
+                    y = adjustedY
+                )
+                val contactDistance = (playerScreenPosition - adjustedCenter).getDistance()
+                if (role == AmbientCreatureRole.Prey &&
+                    contactDistance < (playerSizePx + creatureSizePx) * 0.31f
+                ) {
+                    preyContact = creature
+                }
+                if (role == AmbientCreatureRole.Predator &&
+                    contactDistance < (playerSizePx + creatureSizePx) * 0.34f
+                ) {
+                    predatorContact = creature
+                }
+
                 val depthFade = (1f - creature.depthMeters / MaxDiveDepthMeters * 0.34f)
                     .coerceIn(0.58f, 1f)
+                val facesRight = when {
+                    role == AmbientCreatureRole.Predator -> playerScreenPosition.x > adjustedCenter.x
+                    role == AmbientCreatureRole.Prey && distanceToPlayer < 260f ->
+                        playerScreenPosition.x < adjustedCenter.x
 
-                Box(
-                    modifier = Modifier
-                        .size(creature.sizeDp.dp)
-                        .offset {
-                            IntOffset(
-                                x = screenX.roundToInt(),
-                                y = (screenY - creatureSizePx / 2f).roundToInt()
-                            )
-                        }
-                        .clickable {
-                            onCreatureClick(creature.toFishInfo())
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(creature.imageRes),
-                        contentDescription = creature.name,
+                    else -> creature.swimsRight
+                }
+
+                if (adjustedX in -creatureSizePx..(viewportWidth + creatureSizePx)) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                alpha = depthFade
-                                scaleX = if (creature.swimsRight) -1f else 1f
-                                rotationZ = sin(swimClock * 6.28f + index) * 3.5f
+                            .size(displaySizeDp.dp)
+                            .offset {
+                                IntOffset(
+                                    x = adjustedX.roundToInt(),
+                                    y = (adjustedY - creatureSizePx / 2f).roundToInt()
+                                )
+                            }
+                            .clickable {
+                                onCreatureClick(creature.toFishInfo())
                             },
-                        contentScale = ContentScale.Fit
-                    )
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(creature.imageRes),
+                            contentDescription = creature.name,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = depthFade
+                                    scaleX = if (facesRight) -1f else 1f
+                                    rotationZ = sin(swimClock * 6.28f + index) *
+                                        if (role == AmbientCreatureRole.Predator) 2.2f else 3.5f
+                                },
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                 }
             }
+        }
+
+        LaunchedEffect(preyContact?.name) {
+            preyContact?.let(onPreyEaten)
+        }
+        LaunchedEffect(predatorContact?.name, interactionTick) {
+            predatorContact?.let(onPredatorHit)
         }
     }
 }
@@ -2009,20 +2367,18 @@ private fun FishEventCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Okyanus Olayı",
+                        text = "Bilgi Görevi",
                         color = Color.White,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
                     )
                     Text(
                         text = depthZone.name,
                         color = depthZone.color,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
                     )
                 }
             }
@@ -2053,12 +2409,283 @@ private fun FishEventCard(
                             text = option.text,
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GameOverSummaryCard(
+    fish: PlayableFish,
+    state: GameState,
+    choices: List<ChoiceRecord>,
+    onChangeFish: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scrollState = rememberScrollState()
+    val overlayInteractionSource = remember { MutableInteractionSource() }
+    val learningScore = learningScoreFor(choices)
+    val correctCount = choices.count { it.assessment == ChoiceAssessment.Correct }
+    val riskyOrWrongCount = choices.count {
+        it.assessment == ChoiceAssessment.Risky || it.assessment == ChoiceAssessment.Wrong
+    }
+
+    Box(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.48f))
+            .clickable(
+                interactionSource = overlayInteractionSource,
+                indication = null
+            ) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .widthIn(max = 640.dp)
+                .fillMaxWidth(0.9f)
+                .heightIn(max = 590.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xF4061927)),
+            border = BorderStroke(1.dp, fish.accent.copy(alpha = 0.62f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Dalış Özeti",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "${fish.name} ile sağlık sıfırlandı. Şimdi seçimlerin ne kadar doğruydu bakalım.",
+                        color = Color.White.copy(alpha = 0.78f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SummaryMetric(
+                        label = "Puan",
+                        value = state.score.toString(),
+                        accent = fish.accent,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryMetric(
+                        label = "Derinlik",
+                        value = "${state.depth} m",
+                        accent = fish.accent,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryMetric(
+                        label = "Bilgi",
+                        value = "$learningScore/100",
+                        accent = fish.accent,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Text(
+                    text = "$correctCount doğru seçim, $riskyOrWrongCount riskli veya yanlış seçim.",
+                    color = Color.White.copy(alpha = 0.82f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    if (choices.isEmpty()) {
+                        Text(
+                            text = "Bu turda soru yanıtlamadan sağlık sıfırlandı. Bir sonraki denemede balığın güvenli derinliğini, enerjisini ve avcıları daha yakından takip et.",
+                            color = Color.White.copy(alpha = 0.82f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        choices.forEachIndexed { index, choice ->
+                            ChoiceSummaryRow(
+                                index = index + 1,
+                                choice = choice,
+                                accent = fish.accent
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onChangeFish,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = fish.accent.copy(alpha = 0.9f),
+                        contentColor = Color(0xFF03131B)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Yeni deneme",
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryMetric(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.58f),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = value,
+            color = accent,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black
+        )
+    }
+}
+
+@Composable
+private fun ChoiceSummaryRow(
+    index: Int,
+    choice: ChoiceRecord,
+    accent: Color
+) {
+    val statusColor = assessmentColor(choice.assessment, accent)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.075f))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "$index. ${choice.assessment.label}",
+                color = statusColor,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = "${choice.depthMeters} m",
+                color = Color.White.copy(alpha = 0.58f),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text(
+            text = choice.eventText,
+            color = Color.White.copy(alpha = 0.9f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Seçimin: ${choice.optionText}",
+            color = Color.White.copy(alpha = 0.82f),
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = choice.feedback,
+            color = Color.White.copy(alpha = 0.76f),
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = "Etki: Puan ${formatSignedDelta(choice.scoreDelta)} | Sağlık ${formatSignedDelta(choice.healthDelta)} | Rahatlık ${formatSignedDelta(choice.comfortDelta)} | Açlık ${formatSignedDelta(choice.hungerDelta)} | Enerji ${formatSignedDelta(choice.energyDelta)}",
+            color = Color.White.copy(alpha = 0.62f),
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
+@Composable
+private fun LearningInfoCardView(
+    info: LearningInfoCard,
+    accent: Color,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val labelColor = eventLogTypeColor(info.type, accent)
+
+    Card(
+        modifier = modifier
+            .widthIn(max = 430.dp)
+            .fillMaxWidth(0.86f),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF0061927)),
+        border = BorderStroke(1.dp, labelColor.copy(alpha = 0.55f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = info.type.label,
+                    color = labelColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = info.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            Text(
+                text = info.message,
+                color = Color.White.copy(alpha = 0.88f),
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = labelColor.copy(alpha = 0.9f),
+                    contentColor = Color(0xFF03131B)
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 11.dp)
+            ) {
+                Text(
+                    text = "Anladım",
+                    fontWeight = FontWeight.Black
+                )
             }
         }
     }
@@ -2355,6 +2982,35 @@ private fun FishChatBubble(
 
 private fun formatScoreDelta(delta: Int): String =
     if (delta >= 0) "+$delta" else delta.toString()
+
+private fun formatSignedDelta(delta: Int): String =
+    if (delta > 0) "+$delta" else delta.toString()
+
+private fun preyRespawnDelaySeconds(creatureName: String): Int =
+    30 + (creatureName.fold(0) { total, char -> total + char.code } % 11)
+
+private fun learningScoreFor(choices: List<ChoiceRecord>): Int {
+    if (choices.isEmpty()) return 0
+    val points = choices.sumOf { choice ->
+        when (choice.assessment) {
+            ChoiceAssessment.Correct -> 1.0
+            ChoiceAssessment.Partial -> 0.65
+            ChoiceAssessment.Risky -> 0.3
+            ChoiceAssessment.Wrong -> 0.0
+        }
+    }
+    return ((points / choices.size) * 100).roundToInt()
+}
+
+private fun assessmentColor(
+    assessment: ChoiceAssessment,
+    accent: Color
+): Color = when (assessment) {
+    ChoiceAssessment.Correct -> Color(0xFF06D6A0)
+    ChoiceAssessment.Partial -> accent
+    ChoiceAssessment.Risky -> Color(0xFFFFC857)
+    ChoiceAssessment.Wrong -> Color(0xFFE63946)
+}
 
 private fun startingScenarioFor(fish: PlayableFish): String {
     val diet = dietProfileFor(fish.name, fish.habitat)

@@ -29,7 +29,7 @@ object OpenAiFishEventClient {
             val requestBody = JSONObject()
                 .put("model", MODEL)
                 .put("instructions", eventInstructions())
-                .put("max_output_tokens", 360)
+                .put("max_output_tokens", 520)
                 .put("store", false)
                 .put("input", buildEventInput(context))
 
@@ -71,6 +71,7 @@ object OpenAiFishEventClient {
             {
               "id": "short_snake_case_id",
               "text": "Turkish choice text",
+              "lesson": "one short Turkish reason why this choice is correct, partly correct, risky, or wrong",
               "effects": {
                 "health": 0,
                 "hunger": 0,
@@ -86,7 +87,12 @@ object OpenAiFishEventClient {
         Numeric ranges:
         health -20..10, hunger -20..20, energy -20..10, comfort -20..10, score -10..15.
         Lower hunger is good. Higher energy, comfort, health, and score are good.
+        The primary goal is learning, not random survival drama.
+        Each event must teach or test ONE concrete fact about the selected fish species or the current ocean zone.
         Make the event highly specific to the given fish name, habitat, diet, food, depth range, and ecological role.
+        The event text should be a micro-scenario plus a question.
+        Options should test fish-specific habitat, diet, predators, depth comfort, ocean ecology, pressure, light, current, shelter, pollution, or migration knowledge.
+        The "lesson" field must explain the biological/ocean reason in child-friendly Turkish and will be shown in the end summary.
         Include concrete ocean situations such as currents, predators, prey behavior, reef damage, pollution, low light, pressure, temperature, shelters, or migration.
         Do not ask a generic ocean question when the fish profile supports a more specific survival decision.
         Avoid repeating any previous event/question given in the input.
@@ -132,6 +138,7 @@ object OpenAiFishEventClient {
             options += Option(
                 id = optionJson.optString("id").ifBlank { "option_$index" },
                 text = optionJson.getString("text"),
+                lesson = optionJson.optString("lesson"),
                 effects = Effects(
                     health = effectsJson.optInt("health", 0),
                     hunger = effectsJson.optInt("hunger", 0),
