@@ -70,15 +70,26 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.serhaterdem.seaverse.R
+import com.serhaterdem.seaverse.data.model.Event
+import com.serhaterdem.seaverse.data.model.FishEventContext
+import com.serhaterdem.seaverse.data.model.GameEventEngine
+import com.serhaterdem.seaverse.data.model.GameState
+import com.serhaterdem.seaverse.data.model.Option
 import com.serhaterdem.seaverse.data.remote.FishChatMessage
 import com.serhaterdem.seaverse.data.remote.FishChatRole
 import com.serhaterdem.seaverse.data.remote.OpenAiFishChatClient
+import com.serhaterdem.seaverse.data.remote.OpenAiFishEventClient
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -112,6 +123,18 @@ private data class FishInfo(
     val accent: Color
 )
 
+private enum class EventLogType(val label: String) {
+    Info("Bilgi"),
+    Warning("Uyarı"),
+    Ideal("İdeal"),
+    Extra("Ekstra")
+}
+
+private data class EventLogEntry(
+    val type: EventLogType,
+    val message: String
+)
+
 private data class ComfortRange(
     val label: String,
     val maxComfortDepthMeters: Float
@@ -134,6 +157,12 @@ private data class AmbientCreature(
     val swimsRight: Boolean,
     val verticalDriftPx: Float
 )
+
+private enum class AmbientCreatureRole {
+    Prey,
+    Predator,
+    Neutral
+}
 
 private data class DepthDecoration(
     val id: String,
@@ -171,6 +200,19 @@ private val DepthZones = listOf(
         description = "Cold black water",
         color = Color(0xFF06D6A0)
     )
+)
+
+private val OceanTrivia = listOf(
+    "Mercan resifleri okyanusun en kalabalık yaşam alanlarından biridir.",
+    "Bazı derin deniz canlıları kendi ışığını üreterek av bulur.",
+    "Küçük balık sürüleri birlikte yüzerek avcılara karşı daha güvende kalır.",
+    "Deniz çayırları genç balıklar için doğal saklanma alanı oluşturur.",
+    "Köpek balıkları sudaki titreşimleri çok hassas biçimde algılayabilir.",
+    "Twilight zone bölgesinde ışık azalır, ama birçok canlı gece yüzeye göç eder.",
+    "Abyssal bölgede besin az olduğu için canlılar enerjiyi çok dikkatli kullanır.",
+    "Planktonlar birçok balığın ve deniz canlısının besin zincirindeki ilk halkadır.",
+    "Kelp ormanları balıklar için hem yiyecek hem de sığınak sağlar.",
+    "Derinlik arttıkça basınç yükselir ve rahatlık hızla etkilenebilir."
 )
 
 private val DepthDecorations = listOf(
@@ -862,6 +904,42 @@ private fun OceanGameScreen(
     var activeChatInfo by remember { mutableStateOf<FishInfo?>(null) }
     var health by remember(fish.id) { mutableStateOf(100f) }
     var comfort by remember(fish.id) { mutableStateOf(100f) }
+    var hunger by remember(fish.id) { mutableStateOf(50) }
+    var energy by remember(fish.id) { mutableStateOf(100) }
+    var score by remember(fish.id) { mutableStateOf(0) }
+    var survivedSeconds by remember(fish.id) { mutableStateOf(0) }
+    var lastEventAtSeconds by remember(fish.id) { mutableStateOf(0) }
+    var activeEvent by remember(fish.id) { mutableStateOf<Event?>(null) }
+    var eventFeedback by remember(fish.id) { mutableStateOf<String?>(null) }
+    var isEventLoading by remember(fish.id) { mutableStateOf(false) }
+    var pendingEventRequest by remember(fish.id) { mutableStateOf<GameState?>(null) }
+    var askedEventTexts by remember(fish.id) { mutableStateOf<List<String>>(emptyList()) }
+    var eventLog by remember(fish.id) {
+        val intro = startingScenarioFor(fish)
+        mutableStateOf(
+            listOf(
+                EventLogEntry(
+                    type = EventLogType.Info,
+                    message = "${fish.name} türü olarak oyuna başladın."
+                ),
+                EventLogEntry(
+                    type = EventLogType.Extra,
+                    message = intro
+                )
+            )
+        )
+    }
+    var hasShownDepthWarning by remember(fish.id) { mutableStateOf(false) }
+    var wasOutsideComfortDepth by remember(fish.id) { mutableStateOf(false) }
+    var lastHealthWarningAt by remember(fish.id) { mutableStateOf(-10) }
+    var lastTriviaAt by remember(fish.id) { mutableStateOf(0) }
+
+    fun appendEventLog(type: EventLogType, vararg messages: String) {
+        val entries = messages.map { message ->
+            EventLogEntry(type = type, message = message)
+        }
+        eventLog = (eventLog + entries).takeLast(18)
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -888,6 +966,7 @@ private fun OceanGameScreen(
             }
 
             var previousFrameNanos = 0L
+            var secondAccumulator = 0f
             while (isActive) {
                 withFrameNanos { frameNanos ->
                     if (previousFrameNanos != 0L) {
@@ -898,7 +977,10 @@ private fun OceanGameScreen(
                         var current = playerPosition ?: initialPosition()
 
                         if (input.getDistance() > deadZone) {
-                            val speed = fish.speedPxPerSecond * (0.78f + fish.agility * 0.22f)
+                            val energySpeedFactor = 0.58f + (energy / 100f) * 0.42f
+                            val speed = fish.speedPxPerSecond *
+                                (0.78f + fish.agility * 0.22f) *
+                                energySpeedFactor
                             val next = Offset(
                                 x = current.x + input.x * speed * safeDeltaSeconds,
                                 y = current.y + input.y * speed * safeDeltaSeconds
@@ -945,6 +1027,30 @@ private fun OceanGameScreen(
 
                             else -> health
                         }
+
+                        secondAccumulator += safeDeltaSeconds
+                        while (secondAccumulator >= 1f) {
+                            secondAccumulator -= 1f
+                            val nextSecond = survivedSeconds + 1
+                            survivedSeconds = nextSecond
+                            score += 1
+
+                            if (nextSecond % 5 == 0) {
+                                hunger = (hunger + 1).coerceIn(0, 100)
+                            }
+
+                            if (nextSecond % 2 == 0) {
+                                if (input.getDistance() > deadZone) {
+                                    energy = (energy - 1).coerceIn(0, 100)
+                                } else {
+                                    energy = (energy + 1).coerceIn(0, 100)
+                                }
+                            }
+
+                            if (hunger > 92 && nextSecond % 3 == 0) {
+                                health = (health - 1f).coerceIn(0f, 100f)
+                            }
+                        }
                     }
                     previousFrameNanos = frameNanos
                 }
@@ -968,6 +1074,142 @@ private fun OceanGameScreen(
             0f
         }
         val depthZone = depthZoneFor(depthMeters)
+        val depthOverComfort = (depthMeters - comfortRange.maxComfortDepthMeters)
+            .coerceAtLeast(0f)
+        val gameSnapshot = GameState(
+            fishId = fish.id,
+            health = health.roundToInt().coerceIn(0, 100),
+            comfort = comfort.roundToInt().coerceIn(0, 100),
+            hunger = hunger,
+            energy = energy,
+            depth = depthMeters.roundToInt(),
+            score = score,
+            zone = GameEventEngine.zoneForDepth(depthMeters.roundToInt()),
+            survivedSeconds = survivedSeconds,
+            lastEventAtSeconds = lastEventAtSeconds
+        )
+
+        LaunchedEffect(eventFeedback) {
+            if (eventFeedback != null) {
+                delay(4800)
+                eventFeedback = null
+            }
+        }
+
+        LaunchedEffect(
+            gameSnapshot.survivedSeconds,
+            gameSnapshot.depth,
+            gameSnapshot.comfort,
+            gameSnapshot.health
+        ) {
+            if (depthOverComfort > 0f && !hasShownDepthWarning) {
+                appendEventLog(
+                    EventLogType.Warning,
+                    "Derinlik arttı: ${gameSnapshot.depth} m. Rahatlık düşüyor."
+                )
+                hasShownDepthWarning = true
+            }
+
+            if (depthOverComfort > 0f) {
+                wasOutsideComfortDepth = true
+            } else if (wasOutsideComfortDepth) {
+                appendEventLog(
+                    EventLogType.Ideal,
+                    "İdeal derinlik seviyesindesin. Rahatlık toparlanıyor."
+                )
+                wasOutsideComfortDepth = false
+            }
+
+            if (depthOverComfort > 0f &&
+                gameSnapshot.comfort < 25 &&
+                gameSnapshot.survivedSeconds - lastHealthWarningAt >= 8
+            ) {
+                appendEventLog(
+                    EventLogType.Warning,
+                    "Konfor çok düşük; sağlık azalmaya başlayabilir."
+                )
+                lastHealthWarningAt = gameSnapshot.survivedSeconds
+            }
+        }
+
+        LaunchedEffect(gameSnapshot.survivedSeconds) {
+            if (gameSnapshot.survivedSeconds >= 20 &&
+                gameSnapshot.survivedSeconds - lastTriviaAt >= 30
+            ) {
+                appendEventLog(EventLogType.Extra, OceanTrivia.random())
+                lastTriviaAt = gameSnapshot.survivedSeconds
+            }
+        }
+
+        LaunchedEffect(
+            gameSnapshot.survivedSeconds,
+            gameSnapshot.hunger,
+            gameSnapshot.energy,
+            gameSnapshot.zone,
+            selectedFishInfo,
+            activeChatInfo,
+            eventFeedback
+        ) {
+            if (pendingEventRequest != null) return@LaunchedEffect
+            val canTrigger = GameEventEngine.shouldTriggerEvent(
+                state = gameSnapshot,
+                elapsedSec = gameSnapshot.survivedSeconds,
+                hasActiveEvent = activeEvent != null ||
+                    selectedFishInfo != null ||
+                    activeChatInfo != null ||
+                    eventFeedback != null,
+                isLoading = isEventLoading
+            )
+            if (!canTrigger) return@LaunchedEffect
+
+            pendingEventRequest = gameSnapshot
+            lastEventAtSeconds = gameSnapshot.survivedSeconds
+            appendEventLog(EventLogType.Info, "Yeni bir olay geliyor, hazırlanın.")
+        }
+
+        LaunchedEffect(
+            pendingEventRequest?.fishId,
+            pendingEventRequest?.survivedSeconds,
+            pendingEventRequest?.zone
+        ) {
+            val requestState = pendingEventRequest ?: return@LaunchedEffect
+
+            isEventLoading = true
+            try {
+                if (activeEvent != null) return@LaunchedEffect
+
+                val info = fish.toFishInfo(requestState.depth.toFloat())
+                val context = FishEventContext(
+                    fishId = fish.id,
+                    fishName = fish.name,
+                    habitat = fish.habitat,
+                    personality = fish.personality,
+                    depthRange = info.depthRange,
+                    dietType = info.dietType,
+                    food = info.food,
+                    ecologicalRole = info.ecologicalRole,
+                    gameState = requestState,
+                    previousEventTexts = askedEventTexts
+                )
+                val event = OpenAiFishEventClient
+                    .generateEvent(context)
+                    .getOrElse {
+                        GameEventEngine.fallbackEvent(
+                            state = requestState,
+                            fishName = fish.name,
+                            habitat = fish.habitat,
+                            dietType = info.dietType
+                        )
+                    }
+
+                activeEvent = event
+                askedEventTexts = (askedEventTexts + event.text).takeLast(12)
+                appendEventLog(EventLogType.Info, event.text)
+            } finally {
+                isEventLoading = false
+                pendingEventRequest = null
+            }
+        }
 
         DepthOceanWorld(
             cameraY = cameraY,
@@ -1022,6 +1264,9 @@ private fun OceanGameScreen(
         VitalStatusHud(
             health = health,
             comfort = comfort,
+            hunger = hunger,
+            energy = energy,
+            score = score,
             comfortRange = comfortRange,
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -1045,6 +1290,47 @@ private fun OceanGameScreen(
                 .padding(24.dp),
             accent = fish.accent,
             onVectorChange = { joystickVector = it }
+        )
+
+        activeEvent?.let { event ->
+            FishEventCard(
+                event = event,
+                depthZone = depthZone,
+                accent = fish.accent,
+                onOptionSelected = { option ->
+                    val result = GameEventEngine.applyOption(gameSnapshot, option)
+                    health = result.state.health.toFloat()
+                    comfort = result.state.comfort.toFloat()
+                    hunger = result.state.hunger
+                    energy = result.state.energy
+                    score = result.state.score
+                    activeEvent = null
+                    eventFeedback = result.feedback
+                    appendEventLog(
+                        EventLogType.Info,
+                        "${event.text} karşısında \"${option.text}\" seçimini yaptın. " +
+                            "${formatScoreDelta(result.state.score - gameSnapshot.score)} puan."
+                    )
+                    appendEventLog(
+                        EventLogType.Extra,
+                        result.feedback
+                    )
+                },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .systemBarsPadding()
+                    .padding(24.dp)
+            )
+        }
+
+        EventLogBar(
+            messages = eventLog,
+            isLoading = isEventLoading && activeEvent == null,
+            accent = fish.accent,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .systemBarsPadding()
+                .padding(start = 16.dp, bottom = 18.dp)
         )
 
         selectedFishInfo?.let { info ->
@@ -1365,6 +1651,9 @@ private fun AmbientCreaturesLayer(
 private fun VitalStatusHud(
     health: Float,
     comfort: Float,
+    hunger: Int,
+    energy: Int,
+    score: Int,
     comfortRange: ComfortRange,
     modifier: Modifier = Modifier
 ) {
@@ -1372,6 +1661,13 @@ private fun VitalStatusHud(
         modifier = modifier.width(220.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
+        Text(
+            text = "PUAN $score",
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White.copy(alpha = 0.92f),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black
+        )
         CornerStatusBar(
             label = "SAĞLIK",
             value = health,
@@ -1382,6 +1678,16 @@ private fun VitalStatusHud(
             value = comfort,
             color = Color(0xFF06D6A0),
             footer = "Güvenli: ${comfortRange.label}"
+        )
+        CornerStatusBar(
+            label = "ENERJİ",
+            value = energy.toFloat(),
+            color = Color(0xFF4CC9F0)
+        )
+        CornerStatusBar(
+            label = "AÇLIK",
+            value = hunger.toFloat(),
+            color = Color(0xFFFFB703)
         )
     }
 }
@@ -1508,6 +1814,251 @@ private fun DepthGauge(
                     radius = 5.dp.toPx(),
                     center = Offset(centerX, markerY)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventLogBar(
+    messages: List<EventLogEntry>,
+    isLoading: Boolean,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+
+    LaunchedEffect(messages.size, isLoading) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth(0.28f)
+            .widthIn(max = 380.dp)
+            .height(184.dp),
+        shape = RoundedCornerShape(4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xB7051720)),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.2f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(Color(0x9D092433))
+                    .padding(start = 12.dp, top = 10.dp, end = 10.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    messages.forEachIndexed { index, message ->
+                        EventLogLine(
+                            entry = message,
+                            isLatest = index == messages.lastIndex,
+                            accent = accent
+                        )
+                    }
+                    if (isLoading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                color = accent,
+                                strokeWidth = 2.dp
+                            )
+                            EventLogLine(
+                                entry = EventLogEntry(
+                                    type = EventLogType.Info,
+                                    message = "Olay hazırlanıyor"
+                                ),
+                                isLatest = true,
+                                accent = accent
+                            )
+                        }
+                    }
+                }
+
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.18f))
+                ) {
+                    val thumbFraction = if (scrollState.maxValue > 0) 0.34f else 1f
+                    val scrollProgress = if (scrollState.maxValue > 0) {
+                        scrollState.value / scrollState.maxValue.toFloat()
+                    } else {
+                        0f
+                    }
+                    val travelPx = with(density) { maxHeight.toPx() } * (1f - thumbFraction)
+                    val thumbOffsetPx = (travelPx * scrollProgress).roundToInt()
+
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(x = 0, y = thumbOffsetPx) }
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(thumbFraction)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = if (scrollState.maxValue > 0) 0.9f else 0.42f))
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp)
+                    .background(Color(0xC70B2631))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(
+                            SpanStyle(
+                                color = Color(0xFF9BD4E8),
+                                fontWeight = FontWeight.Black
+                            )
+                        ) {
+                            append("Sea: ")
+                        }
+                        withStyle(SpanStyle(color = Color.White.copy(alpha = 0.72f))) {
+                            append("olay akışı")
+                        }
+                    },
+                    style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventLogLine(
+    entry: EventLogEntry,
+    isLatest: Boolean,
+    accent: Color
+) {
+    val labelColor = eventLogTypeColor(entry.type, accent)
+
+    Text(
+        text = buildAnnotatedString {
+            withStyle(
+                SpanStyle(
+                    color = labelColor.copy(alpha = if (isLatest) 1f else 0.78f),
+                    fontWeight = FontWeight.Black
+                )
+            ) {
+                append(entry.type.label)
+            }
+            withStyle(SpanStyle(color = Color.White.copy(alpha = 0.9f))) {
+                append(": ")
+                append(entry.message)
+            }
+        },
+        color = Color.White,
+        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        fontWeight = if (isLatest) FontWeight.Bold else FontWeight.Medium
+    )
+}
+
+private fun eventLogTypeColor(type: EventLogType, accent: Color): Color = when (type) {
+    EventLogType.Info -> Color(0xFF9BD4E8)
+    EventLogType.Warning -> Color(0xFFFFC857)
+    EventLogType.Ideal -> Color(0xFF06D6A0)
+    EventLogType.Extra -> accent
+}
+
+@Composable
+private fun FishEventCard(
+    event: Event,
+    depthZone: DepthZone,
+    accent: Color,
+    onOptionSelected: (Option) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .widthIn(max = 540.dp)
+            .fillMaxWidth(0.74f),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF0061927)),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.58f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Okyanus Olayı",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = depthZone.name,
+                        color = depthZone.color,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                text = event.text,
+                color = Color.White.copy(alpha = 0.92f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                event.options.forEach { option ->
+                    Button(
+                        onClick = { onOptionSelected(option) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 46.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White.copy(alpha = 0.13f),
+                            contentColor = Color.White
+                        ),
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = option.text,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
@@ -1800,6 +2351,39 @@ private fun FishChatBubble(
             )
         }
     }
+}
+
+private fun formatScoreDelta(delta: Int): String =
+    if (delta >= 0) "+$delta" else delta.toString()
+
+private fun startingScenarioFor(fish: PlayableFish): String {
+    val diet = dietProfileFor(fish.name, fish.habitat)
+    val seaEvent = when {
+        fish.habitat.contains("Reef", ignoreCase = true) ->
+            "Resif çevresinde akıntı yön değiştiriyor; küçük avlar mercan boşluklarına saklanıyor."
+
+        fish.habitat.contains("Open", ignoreCase = true) ||
+            fish.habitat.contains("Current", ignoreCase = true) ->
+            "Açık denizde sürüler dağılmış, uzakta güçlü bir akıntı besin izlerini taşıyor."
+
+        fish.habitat.contains("Deep", ignoreCase = true) ||
+            fish.habitat.contains("Night", ignoreCase = true) ||
+            fish.habitat.contains("Twilight", ignoreCase = true) ->
+            "Işık azalıyor, parlayan küçük canlılar hareketleniyor ve enerji tasarrufu kritik hale geliyor."
+
+        fish.habitat.contains("Kelp", ignoreCase = true) ||
+            fish.habitat.contains("Seagrass", ignoreCase = true) ->
+            "Yosunların arasında saklanma alanları var, ama dipteki hareketler yeni bir tehlike işareti olabilir."
+
+        fish.habitat.contains("Cave", ignoreCase = true) ||
+            fish.habitat.contains("Rock", ignoreCase = true) ->
+            "Kayalık yarıklarda güvenli geçitler var, fakat görüş azalınca doğru rota seçmek önem kazanıyor."
+
+        else ->
+            "Denizde akıntılar değişiyor, av ve sığınak dengesi hızla önem kazanıyor."
+    }
+
+    return "${fish.habitat} bölgesindesin. $seaEvent ${diet.first} olarak ${diet.second} arayacaksın; güvenli derinlik ${comfortRangeFor(fish).label}."
 }
 
 private fun FishInfo.toPersonaPrompt(): String = """
