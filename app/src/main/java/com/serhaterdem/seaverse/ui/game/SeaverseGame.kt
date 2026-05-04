@@ -74,6 +74,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+private const val MaxDiveDepthMeters = 4000f
+private const val WorldDepthScreens = 7.5f
+
 private data class PlayableFish(
     val id: String,
     val name: String,
@@ -84,6 +87,337 @@ private data class PlayableFish(
     val speedPxPerSecond: Float,
     val agility: Float,
     val stamina: Float
+)
+
+private data class FishInfo(
+    val name: String,
+    val habitat: String,
+    val depthRange: String,
+    val dietType: String,
+    val food: String,
+    val ecologicalRole: String,
+    val note: String,
+    val accent: Color
+)
+
+private data class DepthZone(
+    val name: String,
+    val startMeters: Float,
+    val description: String,
+    val color: Color
+)
+
+private data class AmbientCreature(
+    val name: String,
+    val depthMeters: Float,
+    @param:DrawableRes val imageRes: Int,
+    val sizeDp: Float,
+    val speed: Float,
+    val phase: Float,
+    val swimsRight: Boolean,
+    val verticalDriftPx: Float
+)
+
+private data class DepthDecoration(
+    val id: String,
+    val depthMeters: Float,
+    val xFraction: Float,
+    @param:DrawableRes val imageRes: Int,
+    val widthDp: Float,
+    val alpha: Float,
+    val parallax: Float,
+    val anchoredToFloor: Boolean = true
+)
+
+private val DepthZones = listOf(
+    DepthZone(
+        name = "Sunlight Zone",
+        startMeters = 0f,
+        description = "Bright reef water",
+        color = Color(0xFF6FE7FF)
+    ),
+    DepthZone(
+        name = "Twilight Zone",
+        startMeters = 200f,
+        description = "Blue light fades",
+        color = Color(0xFF2F80ED)
+    ),
+    DepthZone(
+        name = "Midnight Zone",
+        startMeters = 1000f,
+        description = "Bioluminescent dark",
+        color = Color(0xFF7353BA)
+    ),
+    DepthZone(
+        name = "Abyssal Zone",
+        startMeters = 3000f,
+        description = "Cold black water",
+        color = Color(0xFF06D6A0)
+    )
+)
+
+private val DepthDecorations = listOf(
+    DepthDecoration(
+        id = "shallow_grass_left",
+        depthMeters = 70f,
+        xFraction = 0.08f,
+        imageRes = R.drawable.deco_seaweed_grass_a,
+        widthDp = 96f,
+        alpha = 0.92f,
+        parallax = 1f
+    ),
+    DepthDecoration(
+        id = "shallow_green_mid",
+        depthMeters = 95f,
+        xFraction = 0.34f,
+        imageRes = R.drawable.deco_seaweed_green_a,
+        widthDp = 118f,
+        alpha = 0.9f,
+        parallax = 1f
+    ),
+    DepthDecoration(
+        id = "shallow_coral_right",
+        depthMeters = 130f,
+        xFraction = 0.78f,
+        imageRes = R.drawable.deco_seaweed_pink_a,
+        widthDp = 112f,
+        alpha = 0.88f,
+        parallax = 1f
+    ),
+    DepthDecoration(
+        id = "shallow_orange",
+        depthMeters = 170f,
+        xFraction = 0.56f,
+        imageRes = R.drawable.deco_seaweed_orange_b,
+        widthDp = 100f,
+        alpha = 0.86f,
+        parallax = 1f
+    ),
+    DepthDecoration(
+        id = "rock_shelf_left",
+        depthMeters = 260f,
+        xFraction = 0.18f,
+        imageRes = R.drawable.deco_rock_a,
+        widthDp = 118f,
+        alpha = 0.82f,
+        parallax = 1f
+    ),
+    DepthDecoration(
+        id = "twilight_bg_weed",
+        depthMeters = 520f,
+        xFraction = 0.7f,
+        imageRes = R.drawable.deco_background_seaweed_a,
+        widthDp = 120f,
+        alpha = 0.44f,
+        parallax = 0.72f
+    ),
+    DepthDecoration(
+        id = "twilight_weed_left",
+        depthMeters = 820f,
+        xFraction = 0.22f,
+        imageRes = R.drawable.deco_background_seaweed_e,
+        widthDp = 126f,
+        alpha = 0.42f,
+        parallax = 0.7f
+    ),
+    DepthDecoration(
+        id = "twilight_rock_right",
+        depthMeters = 1060f,
+        xFraction = 0.82f,
+        imageRes = R.drawable.deco_background_rock_a,
+        widthDp = 150f,
+        alpha = 0.45f,
+        parallax = 0.68f
+    ),
+    DepthDecoration(
+        id = "midnight_bg_weed",
+        depthMeters = 1500f,
+        xFraction = 0.14f,
+        imageRes = R.drawable.deco_background_seaweed_a,
+        widthDp = 112f,
+        alpha = 0.32f,
+        parallax = 0.62f
+    ),
+    DepthDecoration(
+        id = "midnight_rock",
+        depthMeters = 2080f,
+        xFraction = 0.62f,
+        imageRes = R.drawable.deco_background_rock_b,
+        widthDp = 170f,
+        alpha = 0.34f,
+        parallax = 0.58f
+    ),
+    DepthDecoration(
+        id = "abyss_weed",
+        depthMeters = 3180f,
+        xFraction = 0.28f,
+        imageRes = R.drawable.deco_background_seaweed_e,
+        widthDp = 110f,
+        alpha = 0.28f,
+        parallax = 0.52f
+    ),
+    DepthDecoration(
+        id = "abyss_rock",
+        depthMeters = 3720f,
+        xFraction = 0.74f,
+        imageRes = R.drawable.deco_rock_b,
+        widthDp = 140f,
+        alpha = 0.5f,
+        parallax = 0.86f
+    )
+)
+
+private val AmbientCreatures = listOf(
+    AmbientCreature(
+        name = "Clown Reef Fish",
+        depthMeters = 45f,
+        imageRes = R.drawable.fish_sunburst,
+        sizeDp = 62f,
+        speed = 0.34f,
+        phase = 0.08f,
+        swimsRight = true,
+        verticalDriftPx = 12f
+    ),
+    AmbientCreature(
+        name = "Rosefin",
+        depthMeters = 80f,
+        imageRes = R.drawable.fish_rosefin,
+        sizeDp = 58f,
+        speed = 0.42f,
+        phase = 0.52f,
+        swimsRight = false,
+        verticalDriftPx = 16f
+    ),
+    AmbientCreature(
+        name = "Reef Guardian",
+        depthMeters = 135f,
+        imageRes = R.drawable.fish_reef_guardian,
+        sizeDp = 76f,
+        speed = 0.25f,
+        phase = 0.31f,
+        swimsRight = true,
+        verticalDriftPx = 10f
+    ),
+    AmbientCreature(
+        name = "Silver Needle",
+        depthMeters = 230f,
+        imageRes = R.drawable.fish_silver_needle,
+        sizeDp = 48f,
+        speed = 0.62f,
+        phase = 0.12f,
+        swimsRight = true,
+        verticalDriftPx = 18f
+    ),
+    AmbientCreature(
+        name = "Yellowfin Ace",
+        depthMeters = 360f,
+        imageRes = R.drawable.fish_yellowfin_ace,
+        sizeDp = 70f,
+        speed = 0.5f,
+        phase = 0.72f,
+        swimsRight = false,
+        verticalDriftPx = 20f
+    ),
+    AmbientCreature(
+        name = "Aqua Shark",
+        depthMeters = 540f,
+        imageRes = R.drawable.fish_aqua_shark,
+        sizeDp = 104f,
+        speed = 0.33f,
+        phase = 0.4f,
+        swimsRight = true,
+        verticalDriftPx = 14f
+    ),
+    AmbientCreature(
+        name = "Moon Glider",
+        depthMeters = 760f,
+        imageRes = R.drawable.fish_moon_glider,
+        sizeDp = 94f,
+        speed = 0.22f,
+        phase = 0.03f,
+        swimsRight = false,
+        verticalDriftPx = 26f
+    ),
+    AmbientCreature(
+        name = "Violet Razor",
+        depthMeters = 1080f,
+        imageRes = R.drawable.fish_violet_razor,
+        sizeDp = 68f,
+        speed = 0.46f,
+        phase = 0.66f,
+        swimsRight = true,
+        verticalDriftPx = 22f
+    ),
+    AmbientCreature(
+        name = "Lantern Dart",
+        depthMeters = 1380f,
+        imageRes = R.drawable.fish_lantern_dart,
+        sizeDp = 78f,
+        speed = 0.39f,
+        phase = 0.21f,
+        swimsRight = false,
+        verticalDriftPx = 28f
+    ),
+    AmbientCreature(
+        name = "Crimson Glider",
+        depthMeters = 1720f,
+        imageRes = R.drawable.fish_crimson_glider,
+        sizeDp = 72f,
+        speed = 0.36f,
+        phase = 0.87f,
+        swimsRight = true,
+        verticalDriftPx = 20f
+    ),
+    AmbientCreature(
+        name = "Stone Shark",
+        depthMeters = 2200f,
+        imageRes = R.drawable.fish_stone_shark,
+        sizeDp = 118f,
+        speed = 0.24f,
+        phase = 0.58f,
+        swimsRight = false,
+        verticalDriftPx = 16f
+    ),
+    AmbientCreature(
+        name = "Ancient Grouper",
+        depthMeters = 2650f,
+        imageRes = R.drawable.fish_ancient_grouper,
+        sizeDp = 112f,
+        speed = 0.2f,
+        phase = 0.15f,
+        swimsRight = true,
+        verticalDriftPx = 12f
+    ),
+    AmbientCreature(
+        name = "Turquoise Tank",
+        depthMeters = 3180f,
+        imageRes = R.drawable.fish_turquoise_tank,
+        sizeDp = 96f,
+        speed = 0.19f,
+        phase = 0.69f,
+        swimsRight = false,
+        verticalDriftPx = 18f
+    ),
+    AmbientCreature(
+        name = "Deep Royal Snapper",
+        depthMeters = 3550f,
+        imageRes = R.drawable.fish_royal_snapper,
+        sizeDp = 84f,
+        speed = 0.28f,
+        phase = 0.38f,
+        swimsRight = true,
+        verticalDriftPx = 24f
+    ),
+    AmbientCreature(
+        name = "Icefin",
+        depthMeters = 3860f,
+        imageRes = R.drawable.fish_icefin,
+        sizeDp = 76f,
+        speed = 0.31f,
+        phase = 0.9f,
+        swimsRight = false,
+        verticalDriftPx = 18f
+    )
 )
 
 private val FishRoster = listOf(
@@ -507,6 +841,7 @@ private fun OceanGameScreen(
     val currentJoystickVector by rememberUpdatedState(joystickVector)
     var playerPosition by remember(fish.id) { mutableStateOf<Offset?>(null) }
     var facingRight by remember(fish.id) { mutableStateOf(true) }
+    var selectedFishInfo by remember { mutableStateOf<FishInfo?>(null) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -516,13 +851,15 @@ private fun OceanGameScreen(
         val density = LocalDensity.current
         val fishSize = if (maxWidth < 680.dp) 86.dp else 118.dp
         val fishSizePx = with(density) { fishSize.toPx() }
+        val worldHeightPx = (sceneSize.height * WorldDepthScreens)
+            .coerceAtLeast(sceneSize.height.toFloat())
 
-        LaunchedEffect(sceneSize, fish.id, fishSizePx) {
+        LaunchedEffect(sceneSize, fish.id, fishSizePx, worldHeightPx) {
             if (sceneSize.width == 0 || sceneSize.height == 0) return@LaunchedEffect
 
             fun initialPosition() = Offset(
                 x = sceneSize.width * 0.44f,
-                y = sceneSize.height * 0.46f
+                y = sceneSize.height * 0.42f
             )
 
             if (playerPosition == null) {
@@ -547,7 +884,7 @@ private fun OceanGameScreen(
                             val halfFish = fishSizePx / 2f
                             playerPosition = Offset(
                                 x = next.x.coerceIn(halfFish, sceneSize.width - halfFish),
-                                y = next.y.coerceIn(halfFish, sceneSize.height - halfFish)
+                                y = next.y.coerceIn(halfFish, worldHeightPx - halfFish)
                             )
                             if (input.x > 0.08f) facingRight = true
                             if (input.x < -0.08f) facingRight = false
@@ -558,12 +895,42 @@ private fun OceanGameScreen(
             }
         }
 
-        OceanBackdrop(dimAmount = 0.08f)
-        UnderwaterOverlay(modifier = Modifier.fillMaxSize())
-
         val position = playerPosition ?: Offset(
             x = sceneSize.width * 0.44f,
-            y = sceneSize.height * 0.46f
+            y = sceneSize.height * 0.42f
+        )
+        val cameraY = if (sceneSize.height > 0) {
+            (position.y - sceneSize.height * 0.48f)
+                .coerceIn(0f, (worldHeightPx - sceneSize.height).coerceAtLeast(0f))
+        } else {
+            0f
+        }
+        val depthMeters = if (worldHeightPx > fishSizePx) {
+            ((position.y - fishSizePx / 2f) / (worldHeightPx - fishSizePx))
+                .coerceIn(0f, 1f) * MaxDiveDepthMeters
+        } else {
+            0f
+        }
+        val depthZone = depthZoneFor(depthMeters)
+
+        DepthOceanWorld(
+            cameraY = cameraY,
+            worldHeightPx = worldHeightPx,
+            depthMeters = depthMeters,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        DepthDecorationsLayer(
+            cameraY = cameraY,
+            worldHeightPx = worldHeightPx,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        AmbientCreaturesLayer(
+            cameraY = cameraY,
+            worldHeightPx = worldHeightPx,
+            modifier = Modifier.fillMaxSize(),
+            onCreatureClick = { selectedFishInfo = it }
         )
 
         Image(
@@ -574,8 +941,11 @@ private fun OceanGameScreen(
                 .offset {
                     IntOffset(
                         x = (position.x - fishSizePx / 2f).roundToInt(),
-                        y = (position.y - fishSizePx / 2f).roundToInt()
+                        y = (position.y - cameraY - fishSizePx / 2f).roundToInt()
                     )
+                }
+                .clickable {
+                    selectedFishInfo = fish.toFishInfo(depthMeters)
                 }
                 .graphicsLayer {
                     scaleX = if (facingRight) -1f else 1f
@@ -593,6 +963,24 @@ private fun OceanGameScreen(
                 .padding(16.dp)
         )
 
+        DepthReadout(
+            depthMeters = depthMeters,
+            depthZone = depthZone,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .systemBarsPadding()
+                .padding(16.dp)
+        )
+
+        DepthGauge(
+            depthMeters = depthMeters,
+            depthZone = depthZone,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .systemBarsPadding()
+                .padding(start = 16.dp)
+        )
+
         MovementJoystick(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -600,6 +988,497 @@ private fun OceanGameScreen(
                 .padding(24.dp),
             accent = fish.accent,
             onVectorChange = { joystickVector = it }
+        )
+
+        selectedFishInfo?.let { info ->
+            FishInfoCard(
+                info = info,
+                onDismiss = { selectedFishInfo = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .systemBarsPadding()
+                    .padding(start = 24.dp, end = 188.dp, bottom = 18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DepthOceanWorld(
+    cameraY: Float,
+    worldHeightPx: Float,
+    depthMeters: Float,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "deep ocean ambience")
+    val drift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12000),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "deep particle drift"
+    )
+    val shimmer by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "deep light shimmer"
+    )
+    val shallowBackdropAlpha = (1f - depthMeters / 650f).coerceIn(0f, 0.96f)
+
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val safeWorldHeight = worldHeightPx.coerceAtLeast(size.height)
+            val topProgress = (cameraY / safeWorldHeight).coerceIn(0f, 1f)
+            val middleProgress = ((cameraY + size.height * 0.5f) / safeWorldHeight)
+                .coerceIn(0f, 1f)
+            val bottomProgress = ((cameraY + size.height) / safeWorldHeight)
+                .coerceIn(0f, 1f)
+
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        oceanColorAt(topProgress),
+                        oceanColorAt(middleProgress),
+                        oceanColorAt(bottomProgress)
+                    )
+                )
+            )
+        }
+
+        Image(
+            painter = painterResource(R.drawable.sea_background),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(alpha = shallowBackdropAlpha),
+            contentScale = ContentScale.Crop
+        )
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val safeWorldHeight = worldHeightPx.coerceAtLeast(size.height)
+            val depthProgress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
+            val surfaceFade = (1f - cameraY / (safeWorldHeight * 0.22f)).coerceIn(0f, 1f)
+            val marineSnowAlpha = (0.08f + depthProgress * 0.22f).coerceIn(0.08f, 0.3f)
+
+            repeat(7) { index ->
+                val startX = size.width * (0.16f + index * 0.11f)
+                val endX = size.width * (0.03f + index * 0.15f + shimmer * 0.04f)
+                drawLine(
+                    color = Color.White.copy(alpha = surfaceFade * (0.045f + shimmer * 0.025f)),
+                    start = Offset(startX, -20f),
+                    end = Offset(endX, size.height * 0.8f),
+                    strokeWidth = 30f + index * 7f,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            var markerMeters = 0f
+            while (markerMeters <= MaxDiveDepthMeters) {
+                val markerY = safeWorldHeight * (markerMeters / MaxDiveDepthMeters) - cameraY
+                if (markerY in -8f..(size.height + 8f)) {
+                    val strongLine = markerMeters % 1000f == 0f
+                    drawLine(
+                        color = Color.White.copy(alpha = if (strongLine) 0.18f else 0.08f),
+                        start = Offset(0f, markerY),
+                        end = Offset(size.width, markerY),
+                        strokeWidth = if (strongLine) 2.2f else 1.1f
+                    )
+                }
+                markerMeters += 500f
+            }
+
+            repeat(90) { index ->
+                val lane = ((index * 37) % 100) / 100f
+                val wave = sin((drift * 6.28f) + index * 0.8f) * (10f + depthProgress * 18f)
+                val x = size.width * lane + wave
+                val travel = size.height + 160f
+                val speed = 0.45f + (index % 7) * 0.08f
+                val y = size.height - ((drift * travel * speed + index * 53f + cameraY * 0.12f) % travel)
+                val radius = 1.2f + (index % 4) * 0.75f
+                drawCircle(
+                    color = Color.White.copy(alpha = marineSnowAlpha),
+                    radius = radius,
+                    center = Offset(x, y)
+                )
+            }
+
+            repeat(16) { index ->
+                val worldY = safeWorldHeight * (0.28f + index * 0.042f)
+                val y = worldY - cameraY
+                if (y in -80f..(size.height + 80f)) {
+                    val x = size.width * (0.08f + ((index * 29) % 84) / 100f)
+                    val plantHeight = 28f + (index % 5) * 8f
+                    val color = if (index % 2 == 0) Color(0xFF00F5D4) else Color(0xFFC77DFF)
+                    drawLine(
+                        color = color.copy(alpha = 0.18f + depthProgress * 0.24f),
+                        start = Offset(x, y + plantHeight),
+                        end = Offset(x + sin(index.toFloat()) * 14f, y),
+                        strokeWidth = 2.4f,
+                        cap = StrokeCap.Round
+                    )
+                    drawCircle(
+                        color = color.copy(alpha = 0.28f + shimmer * 0.18f),
+                        radius = 3.8f + (index % 3),
+                        center = Offset(x + sin(index.toFloat()) * 14f, y)
+                    )
+                }
+            }
+
+            val seaFloorTop = safeWorldHeight - size.height * 0.28f
+            val floorY = seaFloorTop - cameraY
+            if (floorY < size.height + 120f) {
+                drawRect(
+                    color = Color(0xFF071016),
+                    topLeft = Offset(0f, floorY.coerceAtLeast(0f)),
+                    size = Size(size.width, size.height - floorY.coerceAtLeast(0f))
+                )
+                repeat(12) { index ->
+                    val rockX = size.width * (((index * 19) % 100) / 100f)
+                    val rockY = floorY + 28f + (index % 4) * 22f
+                    drawOval(
+                        color = Color(0xFF14242C).copy(alpha = 0.92f),
+                        topLeft = Offset(rockX - 42f, rockY),
+                        size = Size(84f + (index % 3) * 24f, 26f + (index % 4) * 9f)
+                    )
+                }
+                repeat(6) { index ->
+                    val ventX = size.width * (0.12f + index * 0.15f)
+                    val ventBaseY = floorY + 92f
+                    drawLine(
+                        color = Color(0xFF00F5D4).copy(alpha = 0.2f + shimmer * 0.15f),
+                        start = Offset(ventX, ventBaseY),
+                        end = Offset(ventX + sin(index + shimmer) * 18f, ventBaseY - 76f),
+                        strokeWidth = 3f,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            drawRect(
+                color = Color.Black.copy(alpha = (depthProgress * 0.34f).coerceIn(0f, 0.34f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun DepthDecorationsLayer(
+    cameraY: Float,
+    worldHeightPx: Float,
+    modifier: Modifier = Modifier
+) {
+    var layerSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+
+    Box(modifier = modifier.onSizeChanged { layerSize = it }) {
+        val viewportWidth = layerSize.width.toFloat()
+        val viewportHeight = layerSize.height.toFloat()
+        if (viewportWidth <= 0f || viewportHeight <= 0f) return@Box
+
+        DepthDecorations.forEach { decoration ->
+            val worldY = worldYForDepth(decoration.depthMeters, worldHeightPx)
+            val parallaxCameraY = cameraY * decoration.parallax
+            val screenY = worldY - parallaxCameraY
+            val widthPx = with(density) { decoration.widthDp.dp.toPx() }
+
+            if (screenY in -widthPx..(viewportHeight + widthPx)) {
+                Image(
+                    painter = painterResource(decoration.imageRes),
+                    contentDescription = decoration.id,
+                    modifier = Modifier
+                        .width(decoration.widthDp.dp)
+                        .offset {
+                            IntOffset(
+                                x = (viewportWidth * decoration.xFraction - widthPx / 2f).roundToInt(),
+                                y = (screenY - widthPx * 0.55f).roundToInt()
+                            )
+                        }
+                        .graphicsLayer {
+                            alpha = decoration.alpha
+                            scaleX = if (decoration.xFraction > 0.5f) -1f else 1f
+                        },
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AmbientCreaturesLayer(
+    cameraY: Float,
+    worldHeightPx: Float,
+    modifier: Modifier = Modifier,
+    onCreatureClick: (FishInfo) -> Unit
+) {
+    var layerSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+    val transition = rememberInfiniteTransition(label = "ambient creatures")
+    val swimClock by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 60000),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ambient swim clock"
+    )
+
+    Box(
+        modifier = modifier.onSizeChanged { layerSize = it }
+    ) {
+        val viewportWidth = layerSize.width.toFloat()
+        val viewportHeight = layerSize.height.toFloat()
+        if (viewportWidth <= 0f || viewportHeight <= 0f) return@Box
+
+        AmbientCreatures.forEachIndexed { index, creature ->
+            val creatureSizePx = with(density) { creature.sizeDp.dp.toPx() }
+            val worldY = worldYForDepth(creature.depthMeters, worldHeightPx)
+            val wave = sin(swimClock * 6.28f * (1.2f + creature.speed) + index) *
+                creature.verticalDriftPx
+            val screenY = worldY - cameraY + wave
+
+            if (screenY in -creatureSizePx..(viewportHeight + creatureSizePx)) {
+                val cycleSpeed = 0.58f + creature.speed * 1.9f
+                val cycle = (swimClock * cycleSpeed + creature.phase) % 1f
+                val travel = viewportWidth + creatureSizePx * 2f
+                val leftToRightX = -creatureSizePx + cycle * travel
+                val screenX = if (creature.swimsRight) {
+                    leftToRightX
+                } else {
+                    viewportWidth + creatureSizePx - cycle * travel
+                }
+                val depthFade = (1f - creature.depthMeters / MaxDiveDepthMeters * 0.34f)
+                    .coerceIn(0.58f, 1f)
+
+                Box(
+                    modifier = Modifier
+                        .size(creature.sizeDp.dp)
+                        .offset {
+                            IntOffset(
+                                x = screenX.roundToInt(),
+                                y = (screenY - creatureSizePx / 2f).roundToInt()
+                            )
+                        }
+                        .clickable {
+                            onCreatureClick(creature.toFishInfo())
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(creature.imageRes),
+                        contentDescription = creature.name,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = depthFade
+                                scaleX = if (creature.swimsRight) -1f else 1f
+                                rotationZ = sin(swimClock * 6.28f + index) * 3.5f
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DepthReadout(
+    depthMeters: Float,
+    depthZone: DepthZone,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.width(190.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xB8061927)),
+        border = BorderStroke(1.dp, depthZone.color.copy(alpha = 0.42f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = "Depth",
+                color = Color.White.copy(alpha = 0.68f),
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                text = "${depthMeters.roundToInt()} m",
+                color = Color.White,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = depthZone.name,
+                color = depthZone.color,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = depthZone.description,
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun DepthGauge(
+    depthMeters: Float,
+    depthZone: DepthZone,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0x99061927)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+    ) {
+        Canvas(
+            modifier = Modifier
+                .width(46.dp)
+                .height(210.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            val progress = (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f)
+            val barWidth = 5.dp.toPx()
+            val centerX = size.width / 2f
+
+            drawLine(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF64D2FF),
+                        Color(0xFF1B4965),
+                        Color(0xFF060A16)
+                    )
+                ),
+                start = Offset(centerX, 0f),
+                end = Offset(centerX, size.height),
+                strokeWidth = barWidth,
+                cap = StrokeCap.Round
+            )
+
+            repeat(5) { index ->
+                val y = size.height * (index / 4f)
+                drawLine(
+                    color = Color.White.copy(alpha = 0.32f),
+                    start = Offset(centerX - 8.dp.toPx(), y),
+                    end = Offset(centerX + 8.dp.toPx(), y),
+                    strokeWidth = 1.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+
+            val markerY = size.height * progress
+            drawCircle(
+                color = depthZone.color.copy(alpha = 0.28f),
+                radius = 13.dp.toPx(),
+                center = Offset(centerX, markerY)
+            )
+            drawCircle(
+                color = Color.White,
+                radius = 5.dp.toPx(),
+                center = Offset(centerX, markerY)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FishInfoCard(
+    info: FishInfo,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.width(430.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xEA061927)),
+        border = BorderStroke(1.dp, info.accent.copy(alpha = 0.52f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = info.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = info.habitat,
+                        color = info.accent,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White
+                    ),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(text = "Kapat")
+                }
+            }
+
+            FishInfoRow(label = "Derinlik", value = info.depthRange)
+            FishInfoRow(label = "Beslenme Tipi", value = info.dietType)
+            FishInfoRow(label = "Ne Yer?", value = info.food)
+            FishInfoRow(label = "Rol", value = info.ecologicalRole)
+
+            Text(
+                text = info.note,
+                color = Color.White.copy(alpha = 0.78f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun FishInfoRow(
+    label: String,
+    value: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.58f),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = value,
+            color = Color.White.copy(alpha = 0.9f),
+            style = MaterialTheme.typography.bodyMedium
         )
     }
 }
@@ -863,4 +1742,154 @@ private fun UnderwaterOverlay(modifier: Modifier = Modifier) {
             size = Size(size.width, size.height * 0.14f)
         )
     }
+}
+
+private fun depthZoneFor(depthMeters: Float): DepthZone =
+    DepthZones.last { depthMeters >= it.startMeters }
+
+private fun worldYForDepth(depthMeters: Float, worldHeightPx: Float): Float =
+    (depthMeters / MaxDiveDepthMeters).coerceIn(0f, 1f) * worldHeightPx
+
+private fun PlayableFish.toFishInfo(currentDepthMeters: Float): FishInfo {
+    val diet = dietProfileFor(name, habitat)
+    return FishInfo(
+        name = name,
+        habitat = habitat,
+        depthRange = "${depthRangeForHabitat(habitat)} - şu an ${currentDepthMeters.roundToInt()} m",
+        dietType = diet.first,
+        food = diet.second,
+        ecologicalRole = roleForHabitat(habitat),
+        note = "$personality. Bu türle oynarken hız, çeviklik ve dayanıklılık kararlarını dengede tutmalısın.",
+        accent = accent
+    )
+}
+
+private fun AmbientCreature.toFishInfo(): FishInfo {
+    val zone = depthZoneFor(depthMeters)
+    val diet = dietProfileFor(name, habitatForDepth(depthMeters))
+    return FishInfo(
+        name = name,
+        habitat = habitatForDepth(depthMeters),
+        depthRange = "~${depthMeters.roundToInt()} m (${zone.name})",
+        dietType = diet.first,
+        food = diet.second,
+        ecologicalRole = roleForDepth(depthMeters),
+        note = ambientNoteFor(depthMeters),
+        accent = zone.color
+    )
+}
+
+private fun depthRangeForHabitat(habitat: String): String = when {
+    habitat.contains("Open", ignoreCase = true) -> "0-700 m"
+    habitat.contains("Deep", ignoreCase = true) -> "700-3000 m"
+    habitat.contains("Night", ignoreCase = true) -> "800-1800 m"
+    habitat.contains("Twilight", ignoreCase = true) -> "200-1000 m"
+    habitat.contains("Cold", ignoreCase = true) -> "200-1200 m"
+    habitat.contains("Kelp", ignoreCase = true) -> "0-80 m"
+    habitat.contains("Seagrass", ignoreCase = true) -> "0-50 m"
+    habitat.contains("Cave", ignoreCase = true) -> "50-500 m"
+    habitat.contains("Reef", ignoreCase = true) -> "0-200 m"
+    habitat.contains("Lagoon", ignoreCase = true) -> "0-60 m"
+    habitat.contains("Rock", ignoreCase = true) -> "20-300 m"
+    else -> "0-400 m"
+}
+
+private fun habitatForDepth(depthMeters: Float): String = when {
+    depthMeters < 200f -> "Mercan resifi ve sığ güneşli sular"
+    depthMeters < 1000f -> "Twilight zone, açık su ve dik resif yamaçları"
+    depthMeters < 3000f -> "Midnight zone, karanlık açık deniz"
+    else -> "Abyssal zone, soğuk derin deniz tabanı"
+}
+
+private fun dietProfileFor(name: String, habitat: String): Pair<String, String> = when {
+    name.contains("Shark", ignoreCase = true) ->
+        "Etçil" to "Küçük balıklar, kalamar ve zayıf sürü bireyleri"
+
+    name.contains("Needle", ignoreCase = true) || name.contains("Yellowfin", ignoreCase = true) ->
+        "Hızlı avcı" to "Küçük balıklar, kril ve planktonik kabuklular"
+
+    name.contains("Lantern", ignoreCase = true) || name.contains("Violet", ignoreCase = true) ->
+        "Derin su etçili" to "Mikro kabuklular, larvalar ve küçük derin deniz canlıları"
+
+    name.contains("Grouper", ignoreCase = true) || name.contains("Snapper", ignoreCase = true) ->
+        "Etçil / dip avcısı" to "Yengeç, karides, küçük balık ve yumuşakçalar"
+
+    name.contains("Tank", ignoreCase = true) || name.contains("Guardian", ignoreCase = true) ->
+        "Omnivor" to "Alg, küçük kabuklular ve resifteki organik parçacıklar"
+
+    name.contains("Glider", ignoreCase = true) || name.contains("Icefin", ignoreCase = true) ->
+        "Plankton avcısı" to "Zooplankton, küçük karidesler ve su kolonundaki larvalar"
+
+    habitat.contains("Reef", ignoreCase = true) || habitat.contains("resif", ignoreCase = true) ->
+        "Omnivor" to "Alg, plankton, küçük kabuklular ve resif canlıları"
+
+    else ->
+        "Fırsatçı beslenme" to "Plankton, küçük balıklar ve bulunduğu derinlikteki küçük canlılar"
+}
+
+private fun roleForHabitat(habitat: String): String = when {
+    habitat.contains("Reef", ignoreCase = true) || habitat.contains("Lagoon", ignoreCase = true) ->
+        "Resifte enerji akışını taşır; hem avcı hem de av olabilir."
+
+    habitat.contains("Open", ignoreCase = true) || habitat.contains("Current", ignoreCase = true) ->
+        "Açık denizde sürü hareketi ve avcı-av dengesi için önemlidir."
+
+    habitat.contains("Deep", ignoreCase = true) || habitat.contains("Night", ignoreCase = true) ->
+        "Derin suda az ışıkta besin zincirini canlı tutar."
+
+    else ->
+        "Bulunduğu habitatta besin zincirinin orta halkalarından biridir."
+}
+
+private fun roleForDepth(depthMeters: Float): String = when {
+    depthMeters < 200f -> "Sığ bölgede resif besin zincirinin hareketli halkasıdır."
+    depthMeters < 1000f -> "Twilight zone'da yüzeyden derine enerji taşıyan göçmen türlerdendir."
+    depthMeters < 3000f -> "Midnight zone'da az ışıklı ortamda avcı-av dengesini kurar."
+    else -> "Abyssal bölgede kıt besinle yaşayan derin deniz ağının parçasıdır."
+}
+
+private fun ambientNoteFor(depthMeters: Float): String = when {
+    depthMeters < 200f -> "Bu bölgede ışık bol olduğu için bitkiler, resifler ve küçük avlar daha yoğundur."
+    depthMeters < 1000f -> "Bu derinlikte ışık hızla azalır; birçok canlı saklanmak ve avlanmak için dikey göç yapar."
+    depthMeters < 3000f -> "Bu katmanda karanlık baskındır; canlılar enerji tasarrufu ve hassas duyularla hayatta kalır."
+    else -> "Burada basınç yüksek, sıcaklık düşük ve besin azdır; yavaş hareket etmek büyük avantajdır."
+}
+
+private fun oceanColorAt(progress: Float): Color {
+    val clamped = progress.coerceIn(0f, 1f)
+    return when {
+        clamped < 0.12f -> blendColor(
+            start = Color(0xFF3ED8FF),
+            end = Color(0xFF0878B7),
+            fraction = clamped / 0.12f
+        )
+
+        clamped < 0.32f -> blendColor(
+            start = Color(0xFF0878B7),
+            end = Color(0xFF073B66),
+            fraction = (clamped - 0.12f) / 0.2f
+        )
+
+        clamped < 0.64f -> blendColor(
+            start = Color(0xFF073B66),
+            end = Color(0xFF061A33),
+            fraction = (clamped - 0.32f) / 0.32f
+        )
+
+        else -> blendColor(
+            start = Color(0xFF061A33),
+            end = Color(0xFF01040A),
+            fraction = (clamped - 0.64f) / 0.36f
+        )
+    }
+}
+
+private fun blendColor(start: Color, end: Color, fraction: Float): Color {
+    val amount = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = start.red + (end.red - start.red) * amount,
+        green = start.green + (end.green - start.green) * amount,
+        blue = start.blue + (end.blue - start.blue) * amount,
+        alpha = start.alpha + (end.alpha - start.alpha) * amount
+    )
 }
