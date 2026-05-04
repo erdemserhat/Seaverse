@@ -23,21 +23,28 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -68,7 +76,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.serhaterdem.seaverse.R
+import com.serhaterdem.seaverse.data.remote.FishChatMessage
+import com.serhaterdem.seaverse.data.remote.FishChatRole
+import com.serhaterdem.seaverse.data.remote.OpenAiFishChatClient
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -847,6 +859,7 @@ private fun OceanGameScreen(
     var playerPosition by remember(fish.id) { mutableStateOf<Offset?>(null) }
     var facingRight by remember(fish.id) { mutableStateOf(true) }
     var selectedFishInfo by remember { mutableStateOf<FishInfo?>(null) }
+    var activeChatInfo by remember { mutableStateOf<FishInfo?>(null) }
     var health by remember(fish.id) { mutableStateOf(100f) }
     var comfort by remember(fish.id) { mutableStateOf(100f) }
 
@@ -1038,10 +1051,25 @@ private fun OceanGameScreen(
             FishInfoCard(
                 info = info,
                 onDismiss = { selectedFishInfo = null },
+                onChatClick = {
+                    activeChatInfo = info
+                    selectedFishInfo = null
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()
                     .padding(start = 24.dp, end = 188.dp, bottom = 18.dp)
+            )
+        }
+
+        activeChatInfo?.let { info ->
+            FishChatPanel(
+                info = info,
+                onDismiss = { activeChatInfo = null },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .systemBarsPadding()
+                    .padding(24.dp)
             )
         }
     }
@@ -1489,6 +1517,7 @@ private fun DepthGauge(
 private fun FishInfoCard(
     info: FishInfo,
     onDismiss: () -> Unit,
+    onChatClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1524,17 +1553,30 @@ private fun FishInfoCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Button(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White
-                    ),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(text = "Kapat")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onChatClick,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = info.accent.copy(alpha = 0.76f),
+                            contentColor = Color(0xFF04111B)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = "Sohbet Et", fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White.copy(alpha = 0.14f),
+                            contentColor = Color.White
+                        ),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = "Kapat")
+                    }
                 }
             }
 
@@ -1551,6 +1593,230 @@ private fun FishInfoCard(
         }
     }
 }
+
+@Composable
+private fun FishChatPanel(
+    info: FishInfo,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
+    var messageText by remember(info.name) { mutableStateOf("") }
+    var isSending by remember(info.name) { mutableStateOf(false) }
+    var messages by remember(info.name) {
+        mutableStateOf(
+            listOf(
+                FishChatMessage(
+                    role = FishChatRole.Fish,
+                    text = "Merhaba, ben ${info.name}. Bana yaşadığım derinliği, ne yediğimi ya da okyanusta nasıl hayatta kaldığımı sorabilirsin."
+                )
+            )
+        )
+    }
+
+    LaunchedEffect(messages.size) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    fun sendMessage() {
+        val trimmed = messageText.trim()
+        if (trimmed.isBlank() || isSending) return
+
+        val historyBeforeUserMessage = messages
+        messages = historyBeforeUserMessage + FishChatMessage(FishChatRole.User, trimmed)
+        messageText = ""
+        isSending = true
+
+        scope.launch {
+            val answer = OpenAiFishChatClient
+                .sendMessage(
+                    personaPrompt = info.toPersonaPrompt(),
+                    history = historyBeforeUserMessage,
+                    userMessage = trimmed
+                )
+                .getOrElse { throwable ->
+                    "Şu an su altı bağlantım zayıf: ${throwable.message ?: "biraz sonra tekrar dener misin?"}"
+                }
+
+            messages = messages + FishChatMessage(FishChatRole.Fish, answer)
+            isSending = false
+        }
+    }
+
+    Card(
+        modifier = modifier
+            .widthIn(max = 560.dp)
+            .fillMaxWidth(0.78f),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF0061927)),
+        border = BorderStroke(1.dp, info.accent.copy(alpha = 0.58f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${info.name} ile Sohbet",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${info.depthRange} / ${info.habitat}",
+                        color = info.accent,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White
+                    ),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(text = "Kapat")
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 158.dp, max = 238.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                messages.forEach { message ->
+                    FishChatBubble(
+                        message = message,
+                        accent = info.accent
+                    )
+                }
+                if (isSending) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = info.accent,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isSending,
+                    singleLine = false,
+                    maxLines = 2,
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                    placeholder = {
+                        Text(
+                            text = "Balığa bir şey sor...",
+                            color = Color.White.copy(alpha = 0.54f)
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = info.accent,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.22f),
+                        focusedContainerColor = Color.White.copy(alpha = 0.08f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.06f),
+                        cursorColor = info.accent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+                Button(
+                    onClick = ::sendMessage,
+                    enabled = messageText.isNotBlank() && !isSending,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = info.accent,
+                        contentColor = Color(0xFF04111B),
+                        disabledContainerColor = Color.White.copy(alpha = 0.12f),
+                        disabledContentColor = Color.White.copy(alpha = 0.42f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 13.dp)
+                ) {
+                    Text(text = "Gönder", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FishChatBubble(
+    message: FishChatMessage,
+    accent: Color
+) {
+    val isUser = message.role == FishChatRole.User
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 390.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (isUser) {
+                        Color.White.copy(alpha = 0.16f)
+                    } else {
+                        accent.copy(alpha = 0.18f)
+                    }
+                )
+                .padding(horizontal = 12.dp, vertical = 9.dp)
+        ) {
+            Text(
+                text = message.text,
+                color = Color.White.copy(alpha = 0.92f),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+private fun FishInfo.toPersonaPrompt(): String = """
+    Sen SeaVerse oyununda "$name" adlı deniz canlısısın.
+    Kullanıcıyla Türkçe konuş ve birinci tekil şahıs kullan.
+    Cevapların kısa, sıcak, merak uyandırıcı ve çocuklara uygun olsun.
+    Bilimsel doğruluktan kopmadan 2-4 cümleyle yanıt ver.
+
+    Habitat: $habitat
+    Derinlik: $depthRange
+    Beslenme tipi: $dietType
+    Ne yer: $food
+    Ekolojik rol: $ecologicalRole
+    Not: $note
+
+    Bilmediğin bir konuda kesin konuşma; okyanusla bağlantılı eğlenceli bir ipucu ver.
+""".trimIndent()
 
 @Composable
 private fun FishInfoRow(
