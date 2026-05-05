@@ -1359,24 +1359,15 @@ private fun OceanGameScreen(
 
         LaunchedEffect(
             gameSnapshot.survivedSeconds,
-            gameSnapshot.hunger,
-            gameSnapshot.energy,
-            gameSnapshot.zone,
-            selectedFishInfo,
-            activeChatInfo,
-            activeInfoCard,
-            eventFeedback
+            gameSnapshot.lastEventAtSeconds,
+            isEventLoading
         ) {
             if (isGameOver) return@LaunchedEffect
             if (pendingEventRequest != null) return@LaunchedEffect
             val canTrigger = GameEventEngine.shouldTriggerEvent(
                 state = gameSnapshot,
                 elapsedSec = gameSnapshot.survivedSeconds,
-                hasActiveEvent = activeEvent != null ||
-                    selectedFishInfo != null ||
-                    activeChatInfo != null ||
-                    activeInfoCard != null ||
-                    eventFeedback != null,
+                hasActiveEvent = activeEvent != null,
                 isLoading = isEventLoading
             )
             if (!canTrigger) return@LaunchedEffect
@@ -1578,61 +1569,6 @@ private fun OceanGameScreen(
             onVectorChange = { joystickVector = it }
         )
 
-        activeEvent?.takeUnless { isGameOver }?.let { event ->
-            FishEventCard(
-                event = event,
-                depthZone = depthZone,
-                accent = fish.accent,
-                onOptionSelected = { option ->
-                    val result = GameEventEngine.applyOption(gameSnapshot, option)
-                    health = result.state.health.toFloat()
-                    comfort = result.state.comfort.toFloat()
-                    hunger = result.state.hunger
-                    energy = result.state.energy
-                    score = result.state.score
-                    choiceHistory = (
-                        choiceHistory + ChoiceRecord(
-                            eventText = event.text,
-                            optionText = option.text,
-                            feedback = result.feedback,
-                            assessment = result.assessment,
-                            scoreDelta = result.state.score - gameSnapshot.score,
-                            healthDelta = result.state.health - gameSnapshot.health,
-                            comfortDelta = result.state.comfort - gameSnapshot.comfort,
-                            hungerDelta = result.state.hunger - gameSnapshot.hunger,
-                            energyDelta = result.state.energy - gameSnapshot.energy,
-                            depthMeters = gameSnapshot.depth
-                        )
-                    ).takeLast(12)
-                    activeEvent = null
-                    eventFeedback = result.feedback
-                    activeInfoCard = LearningInfoCard(
-                        title = "${result.assessment.label} Seçim",
-                        message = result.feedback,
-                        type = when (result.assessment) {
-                            ChoiceAssessment.Correct -> EventLogType.Ideal
-                            ChoiceAssessment.Partial -> EventLogType.Info
-                            ChoiceAssessment.Risky -> EventLogType.Warning
-                            ChoiceAssessment.Wrong -> EventLogType.Warning
-                        }
-                    )
-                    appendEventLog(
-                        EventLogType.Info,
-                        "${event.text} karşısında \"${option.text}\" seçimini yaptın. " +
-                            "${formatScoreDelta(result.state.score - gameSnapshot.score)} puan."
-                    )
-                    appendEventLog(
-                        EventLogType.Extra,
-                        result.feedback
-                    )
-                },
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .systemBarsPadding()
-                    .padding(24.dp)
-            )
-        }
-
         EventLogBar(
             messages = eventLog,
             isLoading = isEventLoading && activeEvent == null,
@@ -1687,6 +1623,61 @@ private fun OceanGameScreen(
                         .padding(start = 16.dp, bottom = 214.dp)
                 )
             }
+
+        activeEvent?.takeUnless { isGameOver }?.let { event ->
+            FishEventCard(
+                event = event,
+                depthZone = depthZone,
+                accent = fish.accent,
+                onOptionSelected = { option ->
+                    val result = GameEventEngine.applyOption(gameSnapshot, option)
+                    health = result.state.health.toFloat()
+                    comfort = result.state.comfort.toFloat()
+                    hunger = result.state.hunger
+                    energy = result.state.energy
+                    score = result.state.score
+                    choiceHistory = (
+                        choiceHistory + ChoiceRecord(
+                            eventText = event.text,
+                            optionText = option.text,
+                            feedback = result.feedback,
+                            assessment = result.assessment,
+                            scoreDelta = result.state.score - gameSnapshot.score,
+                            healthDelta = result.state.health - gameSnapshot.health,
+                            comfortDelta = result.state.comfort - gameSnapshot.comfort,
+                            hungerDelta = result.state.hunger - gameSnapshot.hunger,
+                            energyDelta = result.state.energy - gameSnapshot.energy,
+                            depthMeters = gameSnapshot.depth
+                        )
+                    ).takeLast(12)
+                    activeEvent = null
+                    eventFeedback = result.feedback
+                    activeInfoCard = LearningInfoCard(
+                        title = "${result.assessment.label} Seçim",
+                        message = result.feedback,
+                        type = when (result.assessment) {
+                            ChoiceAssessment.Correct -> EventLogType.Ideal
+                            ChoiceAssessment.Partial -> EventLogType.Info
+                            ChoiceAssessment.Risky -> EventLogType.Warning
+                            ChoiceAssessment.Wrong -> EventLogType.Warning
+                        }
+                    )
+                    appendEventLog(
+                        EventLogType.Info,
+                        "${event.text} karşısında \"${option.text}\" seçimini yaptın. " +
+                            "${formatScoreDelta(result.state.score - gameSnapshot.score)} puan."
+                    )
+                    appendEventLog(
+                        EventLogType.Extra,
+                        result.feedback
+                    )
+                },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .systemBarsPadding()
+                    .padding(24.dp)
+            )
+        }
 
         if (isGameOver) {
             GameOverSummaryCard(
