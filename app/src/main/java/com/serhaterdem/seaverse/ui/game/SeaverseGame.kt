@@ -106,7 +106,7 @@ private const val WorldDepthScreens = 7.5f
 private const val WorldWidthScreens = 3.2f
 private const val PredatorDepthStartMeters = 900f
 
-private data class PlayableFish(
+internal data class PlayableFish(
     val id: String,
     val name: String,
     val habitat: String,
@@ -115,7 +115,8 @@ private data class PlayableFish(
     val accent: Color,
     val speedPxPerSecond: Float,
     val agility: Float,
-    val stamina: Float
+    val stamina: Float,
+    val modelAsset: String? = null
 )
 
 private data class FishInfo(
@@ -624,7 +625,7 @@ private val AmbientCreatures = listOf(
     )
 )
 
-private val FishRoster = listOf(
+internal val FishRoster = listOf(
     PlayableFish(
         id = "aqua_shark",
         name = "Aqua Shark",
@@ -634,7 +635,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF00D5FF),
         speedPxPerSecond = 500f,
         agility = 0.76f,
-        stamina = 0.64f
+        stamina = 0.64f,
+        modelAsset = "models/fish_aqua_shark.glb"
     ),
     PlayableFish(
         id = "ancient_grouper",
@@ -645,7 +647,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFB8D0CF),
         speedPxPerSecond = 260f,
         agility = 0.42f,
-        stamina = 0.97f
+        stamina = 0.97f,
+        modelAsset = "models/fish_ancient_grouper.glb"
     ),
     PlayableFish(
         id = "rosefin",
@@ -656,7 +659,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFF7AA2),
         speedPxPerSecond = 340f,
         agility = 0.78f,
-        stamina = 0.66f
+        stamina = 0.66f,
+        modelAsset = "models/fish_rosefin.glb"
     ),
     PlayableFish(
         id = "sunburst",
@@ -667,7 +671,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFFD166),
         speedPxPerSecond = 360f,
         agility = 0.74f,
-        stamina = 0.68f
+        stamina = 0.68f,
+        modelAsset = "models/fish_sunburst.glb"
     ),
     PlayableFish(
         id = "prism_tailer",
@@ -678,7 +683,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFB388FF),
         speedPxPerSecond = 430f,
         agility = 0.86f,
-        stamina = 0.55f
+        stamina = 0.55f,
+        modelAsset = "models/fish_prism_tailer.glb"
     ),
     PlayableFish(
         id = "silver_needle",
@@ -689,7 +695,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFDCE9F2),
         speedPxPerSecond = 520f,
         agility = 0.88f,
-        stamina = 0.42f
+        stamina = 0.42f,
+        modelAsset = "models/fish_silver_needle.glb"
     ),
     PlayableFish(
         id = "yellowfin_ace",
@@ -700,7 +707,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFF7E733),
         speedPxPerSecond = 500f,
         agility = 0.79f,
-        stamina = 0.61f
+        stamina = 0.61f,
+        modelAsset = "models/fish_yellowfin_ace.glb"
     ),
     PlayableFish(
         id = "moon_glider",
@@ -711,7 +719,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF8EECF5),
         speedPxPerSecond = 300f,
         agility = 0.58f,
-        stamina = 0.8f
+        stamina = 0.8f,
+        modelAsset = "models/fish_moon_glider.glb"
     ),
     PlayableFish(
         id = "blue_sprinter",
@@ -722,7 +731,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF4CC9F0),
         speedPxPerSecond = 470f,
         agility = 0.82f,
-        stamina = 0.58f
+        stamina = 0.58f,
+        modelAsset = "models/fish_blue_sprinter.glb"
     ),
     PlayableFish(
         id = "ember_bloom",
@@ -733,7 +743,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFF9F1C),
         speedPxPerSecond = 360f,
         agility = 0.7f,
-        stamina = 0.74f
+        stamina = 0.74f,
+        modelAsset = "models/fish_ember_bloom.glb"
     ),
     PlayableFish(
         id = "reef_guardian",
@@ -744,7 +755,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF80ED99),
         speedPxPerSecond = 315f,
         agility = 0.62f,
-        stamina = 0.88f
+        stamina = 0.88f,
+        modelAsset = "models/fish_reef_guardian.glb"
     ),
     PlayableFish(
         id = "icefin",
@@ -755,7 +767,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF90DBF4),
         speedPxPerSecond = 410f,
         agility = 0.72f,
-        stamina = 0.68f
+        stamina = 0.68f,
+        modelAsset = "models/fish_icefin.glb"
     ),
     PlayableFish(
         id = "kelp_mender",
@@ -766,7 +779,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFA7C957),
         speedPxPerSecond = 290f,
         agility = 0.6f,
-        stamina = 0.9f
+        stamina = 0.9f,
+        modelAsset = "models/fish_kelp_mender.glb"
     ),
     PlayableFish(
         id = "violet_razor",
@@ -777,7 +791,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFC77DFF),
         speedPxPerSecond = 485f,
         agility = 0.88f,
-        stamina = 0.5f
+        stamina = 0.5f,
+        modelAsset = "models/fish_violet_razor.glb"
     ),
     PlayableFish(
         id = "crimson_glider",
@@ -788,7 +803,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFF6B6B),
         speedPxPerSecond = 395f,
         agility = 0.9f,
-        stamina = 0.52f
+        stamina = 0.52f,
+        modelAsset = "models/fish_crimson_glider.glb"
     ),
     PlayableFish(
         id = "tide_striper",
@@ -799,7 +815,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFF8FA3),
         speedPxPerSecond = 360f,
         agility = 0.66f,
-        stamina = 0.76f
+        stamina = 0.76f,
+        modelAsset = "models/fish_tide_striper.glb"
     ),
     PlayableFish(
         id = "goldfin_racer",
@@ -810,7 +827,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFFD60A),
         speedPxPerSecond = 420f,
         agility = 0.84f,
-        stamina = 0.62f
+        stamina = 0.62f,
+        modelAsset = "models/fish_goldfin_racer.glb"
     ),
     PlayableFish(
         id = "lantern_dart",
@@ -821,7 +839,8 @@ private val FishRoster = listOf(
         accent = Color(0xFF06D6A0),
         speedPxPerSecond = 455f,
         agility = 0.91f,
-        stamina = 0.48f
+        stamina = 0.48f,
+        modelAsset = "models/fish_lantern_dart.glb"
     ),
     PlayableFish(
         id = "royal_snapper",
@@ -832,7 +851,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFFFB703),
         speedPxPerSecond = 330f,
         agility = 0.64f,
-        stamina = 0.88f
+        stamina = 0.88f,
+        modelAsset = "models/fish_royal_snapper.glb"
     ),
     PlayableFish(
         id = "stone_shark",
@@ -843,7 +863,8 @@ private val FishRoster = listOf(
         accent = Color(0xFFB8C0C2),
         speedPxPerSecond = 285f,
         agility = 0.46f,
-        stamina = 0.96f
+        stamina = 0.96f,
+        modelAsset = "models/fish_stone_shark.glb"
     ),
     PlayableFish(
         id = "turquoise_tank",
@@ -854,31 +875,82 @@ private val FishRoster = listOf(
         accent = Color(0xFF64DFDF),
         speedPxPerSecond = 305f,
         agility = 0.56f,
-        stamina = 0.92f
+        stamina = 0.92f,
+        modelAsset = "models/fish_turquoise_tank.glb"
     )
 )
 
+private enum class SeaverseFlow { Scanning, ManualSelect, ArPreview, Playing }
+
 @Composable
 fun SeaverseGameApp() {
-    var selectedFish by remember { mutableStateOf<PlayableFish?>(null) }
+    var flow by remember { mutableStateOf(SeaverseFlow.Scanning) }
+    var fish by remember { mutableStateOf<PlayableFish?>(null) }
+    // ghostFish is set when a fish is picked and never cleared, so FishModelViewer
+    // stays at a fixed position in the composition tree forever. This prevents
+    // Filament's native render thread from crashing on composable disposal.
+    var ghostFish by remember { mutableStateOf<PlayableFish?>(null) }
 
     Surface(color = Color.Black, modifier = Modifier.fillMaxSize()) {
-        selectedFish?.let { fish ->
-            OceanGameScreen(
-                fish = fish,
-                onChangeFish = { selectedFish = null }
-            )
-        } ?: FishOnboardingScreen(
-            fishRoster = FishRoster,
-            onFishSelected = { selectedFish = it }
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Camera layers — only active during ArPreview, sit below the 3D model
+            if (flow == SeaverseFlow.ArPreview) {
+                com.serhaterdem.seaverse.ui.arpreview.CameraPreviewLayer(
+                    modifier = Modifier.fillMaxSize()
+                )
+                com.serhaterdem.seaverse.ui.arpreview.UnderwaterCameraFilter(
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // FishModelViewer — never leaves the composition tree once ghostFish is set.
+            // Full-size during ArPreview, 1dp invisible otherwise so Filament keeps
+            // a valid surface but renders nothing visible.
+            if (ghostFish != null) {
+                com.serhaterdem.seaverse.ui.arpreview.FishModelViewer(
+                    fish = ghostFish!!,
+                    modifier = if (flow == SeaverseFlow.ArPreview)
+                        Modifier.fillMaxSize()
+                    else
+                        Modifier.size(1.dp)
+                )
+            }
+
+            // Screen-specific UI on top
+            when (flow) {
+                SeaverseFlow.Scanning -> com.serhaterdem.seaverse.ui.scan.QrScanScreen(
+                    fishRoster = FishRoster,
+                    onFishResolved = { resolved ->
+                        fish = resolved; ghostFish = resolved; flow = SeaverseFlow.ArPreview
+                    },
+                    onManualSelect = { flow = SeaverseFlow.ManualSelect }
+                )
+                SeaverseFlow.ManualSelect -> FishOnboardingScreen(
+                    fishRoster = FishRoster,
+                    onFishSelected = { resolved ->
+                        fish = resolved; ghostFish = resolved; flow = SeaverseFlow.ArPreview
+                    },
+                    onBack = { flow = SeaverseFlow.Scanning }
+                )
+                SeaverseFlow.ArPreview -> com.serhaterdem.seaverse.ui.arpreview.ArFishPreviewScreen(
+                    fish = fish!!,
+                    onStartGame = { flow = SeaverseFlow.Playing },
+                    onBack = { flow = SeaverseFlow.Scanning }
+                )
+                SeaverseFlow.Playing -> OceanGameScreen(
+                    fish = fish!!,
+                    onChangeFish = { fish = null; flow = SeaverseFlow.Scanning }
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun FishOnboardingScreen(
     fishRoster: List<PlayableFish>,
-    onFishSelected: (PlayableFish) -> Unit
+    onFishSelected: (PlayableFish) -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         OceanBackdrop(dimAmount = 0.42f)
@@ -891,18 +963,31 @@ private fun FishOnboardingScreen(
                 .padding(horizontal = 28.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Choose Your Fish",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = "Pick a swimmer and dive straight into SeaVerse.",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.82f)
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (onBack != null) {
+                    Text(
+                        text = "← Geri",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clickable { onBack() }
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Choose Your Fish",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "Pick a swimmer and dive straight into SeaVerse.",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.82f)
+                    )
+                }
             }
 
             LazyVerticalGrid(
