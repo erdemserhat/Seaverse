@@ -1,0 +1,6 @@
+Projemizde Trello'nun acik kaynak muadili olan Planka'yi kullandik. Asagidaki Link ve Credential'lari kullanarak ulasabilirsiniz:
+
+https://tasks.bluesense.ai/boards/1768310166609987198
+
+kullanici adi: firatuni
+sifre: firatuni
